@@ -1,0 +1,52 @@
+<button
+  type="button"
+  class="chat-fab"
+  (click)="toggle()"
+  [attr.aria-expanded]="open()"
+  title="Abrir el tutor IA"
+>
+  <span class="fab-icon">💬</span>
+  <span class="fab-label">Tutor IA</span>
+</button>
+
+<aside class="chat-drawer" [class.open]="open()">
+  @if (open()) {
+    <header class="chat-header">
+      <span class="chat-title">Tutor IA</span>
+      <span class="chat-status">{{ provider() }}{{ model() ? ' · ' + model() : '' }}</span>
+      @if (allowReset) {
+        <button type="button" class="chat-reset" (click)="reset()">Nueva conversación</button>
+      }
+      <button type="button" class="chat-close" (click)="close()" title="Cerrar">✕</button>
+    </header>
+
+    <div class="chat-scroll">
+      @for (message of messages(); track $index) {
+        <div class="bubble {{ message.role }}">
+          <span class="who">{{ message.role === 'assistant' ? 'Tutor' : 'Usted' }}</span>
+          <p>{{ message.text }}</p>
+        </div>
+      }
+      @if (busy()) {
+        <div class="bubble assistant typing"><p>…</p></div>
+      }
+    </div>
+
+    <div class="quick">
+      @for (action of quickActions(); track action) {
+        <button type="button" class="chip" [disabled]="busy()" (click)="send(action)">{{ action }}</button>
+      }
+    </div>
+
+    <form class="chat-form" (submit)="send(); $event.preventDefault()">
+      <input
+        [value]="draft"
+        (input)="onDraftInput($event)"
+        [disabled]="busy()"
+        placeholder="Escriba su duda aquí…"
+        autocomplete="off"
+      />
+      <button type="submit" class="send-btn" [disabled]="busy() || !draft.trim()">Enviar</button>
+    </form>
+  }
+</aside>
