@@ -1,7 +1,6 @@
 import { Component, Input, OnInit, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { MonacoEditor } from '../monaco-editor';
-import { ChatPanel } from '../chat-panel';
 import { CompileService } from '../compile.service';
 import { CHALLENGE_TEMPLATES, newDraft, templateDraft, type ChallengeTemplate } from '../challenge-drafts';
 import {
@@ -44,7 +43,7 @@ interface PreviewVerdictState {
 @Component({
   selector: 'app-challenge-wizard',
   standalone: true,
-  imports: [MonacoEditor, ChatPanel],
+  imports: [MonacoEditor],
   template: `
     <section class="view wizard">
       <header class="wizard-header">
@@ -257,6 +256,16 @@ interface PreviewVerdictState {
                       {{ fileNameOf(file.path) }}
                     </span>
                   }
+                  <span class="spacer"></span>
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    [disabled]="previewCheckBusy() || !previewEvaluable()"
+                    (click)="runPreviewCompile()"
+                    title="Compilar, ejecutar y verificar"
+                  >
+                    {{ previewCheckBusy() ? 'Compilando…' : 'Compilar' }}
+                  </button>
                 </div>
                 <app-monaco-editor
                   class="preview-editor"
@@ -302,19 +311,9 @@ interface PreviewVerdictState {
                 </div>
               </div>
             }
-            <app-chat-panel [challengeId]="null" [riskLevel]="wizardRisk()" />
             <div class="preview-actions">
               <button type="button" class="btn btn-secondary" (click)="goToStage('Contenido')">
                 ← Anterior
-              </button>
-              <button
-                type="button"
-                class="btn btn-primary"
-                [disabled]="previewCheckBusy() || !previewEvaluable()"
-                (click)="runPreviewCompile()"
-                title="Compilar, ejecutar y verificar"
-              >
-                {{ previewCheckBusy() ? 'Compilando…' : 'Compilar' }}
               </button>
               <button
                 type="button"
@@ -891,9 +890,7 @@ export class ChallengeWizardComponent implements OnInit {
       this.previewVerdict.set(null);
     this.previewOutputLines.set([]);
       this.wizardStage.set('Datos');
-      this.banner.show(
-        `Editando "${challenge.title}" (v${challenge.metadata?.version ?? 1}). Al publicar se crea la v${(challenge.metadata?.version ?? 1) + 1} conservando el challengeId.`,
-      );
+      this.banner.show(`Editando "${challenge.title}" (v${challenge.metadata?.version ?? 1}).`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.banner.show(`No se pudo abrir la edición: ${message}`);
