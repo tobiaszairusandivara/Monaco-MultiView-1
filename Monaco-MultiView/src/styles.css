@@ -103,6 +103,18 @@ app-root {
   color: #000000;
 }
 
+.home h2 {
+  font-size: 3.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@media (min-width: 640px) {
+  .home h2 {
+    font-size: 6rem;
+  }
+}
+
 .muted {
   color: #666666;
 }
