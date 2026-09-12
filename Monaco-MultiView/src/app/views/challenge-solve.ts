@@ -5,7 +5,7 @@ import { ChatPanel } from '../chat-panel';
 import { CompileService } from '../compile.service';
 import type { Challenge, ChatMessage, FailingTest, IntegrityEvent, Verdict } from '../challenge-types';
 import type { ProjectFile } from '../projects';
-import { goBack, isRunnable, prettyJson, riskOf } from '../shared';
+import { fileNameOf, goBack, isRunnable, isTestFilePath, prettyJson, riskOf } from '../shared';
 import { BannerService } from '../services/banner.service';
 import { ChallengesService } from '../services/challenges.service';
 import { SessionService } from '../services/session.service';
@@ -28,36 +28,18 @@ interface CheckState {
           <button type="button" class="btn btn-secondary" (click)="back()">← Volver</button>
           <h2>{{ challenge.title }}</h2>
           <span class="tag">{{ challenge.subtype }}</span>
-          <span class="badge badge-diff">{{ challenge.difficulty }}</span>
+          <span class="badge badge-diff badge-difficulty-{{ challenge.difficulty }}">{{ challenge.difficulty }}</span>
           @if (challenge.configuration.runtime) {
             <span class="tag">{{ challenge.configuration.runtime }}</span>
           }
-          <span class="muted small mono">{{ challenge.courseCohortId }}</span>
+          @if (session.role() !== 'ALUMNO') {
+            <span class="muted small mono">{{ challenge.courseCohortId }}</span>
+          }
         </header>
 
         <div class="student-workspace">
           @if (isRunnable(challenge)) {
             <div class="ide-shell">
-              @if (allowsMultiview()) {
-                <aside class="explorer">
-                  <div class="explorer-title">Archivos del desafío</div>
-                  <p class="explorer-note">
-                    El alumno solo puede editar los archivos base que definió el docente
-                    (no puede agregar ni renombrar).
-                  </p>
-                  <ul class="explorer-list">
-                    @for (path of filePaths(); track path) {
-                      <li
-                        class="explorer-item"
-                        [class.active]="path === activePath()"
-                        (click)="setActivePath(path)"
-                      >
-                        <span class="mono">{{ path }}</span>
-                      </li>
-                    }
-                  </ul>
-                </aside>
-              }
               <div class="ide-main">
                 <div class="workspace-tabs">
                   @for (path of filePaths(); track path) {
@@ -66,7 +48,7 @@ interface CheckState {
                       [class.active]="path === activePath()"
                       (click)="setActivePath(path)"
                     >
-                      {{ path }}
+                      {{ fileNameOf(path) }}
                     </span>
                   }
                   <span class="spacer"></span>
@@ -178,6 +160,7 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
   protected readonly riskOf = riskOf;
   protected readonly isRunnable = isRunnable;
   protected readonly prettyJson = prettyJson;
+  protected readonly fileNameOf = fileNameOf;
 
   protected readonly challenge = signal<Challenge | null>(null);
   protected readonly notFound = signal(false);
@@ -199,11 +182,12 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
     }
   };
 
-  protected readonly filePaths = computed(() => this.files().map((file) => file.path));
+  protected readonly filePaths = computed(() =>
+    this.files().filter((file) => !isTestFilePath(file.path)).map((file) => file.path),
+  );
   protected readonly activeContent = computed(
     () => this.files().find((file) => file.path === this.activePath())?.content ?? '',
   );
-  protected readonly allowsMultiview = computed(() => this.files().length > 1);
   protected readonly canCreateConversation = computed(() => this.session.role() !== 'ALUMNO');
 
   @HostListener('window:keydown', ['$event'])
@@ -296,7 +280,7 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
   }
 
   protected setActivePath(path: string): void {
-    if (this.files().some((file) => file.path === path)) {
+    if (!isTestFilePath(path) && this.files().some((file) => file.path === path)) {
       this.activePath.set(path);
     }
   }

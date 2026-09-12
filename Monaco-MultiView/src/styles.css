@@ -301,6 +301,24 @@ kbd {
   border: 1px solid #000000;
 }
 
+.badge-difficulty-BASICO {
+  color: #000000;
+  background: #a5d6a7;
+  border: 1px solid #a5d6a7;
+}
+
+.badge-difficulty-MEDIO {
+  color: #000000;
+  background: #e67e22;
+  border: 1px solid #e67e22;
+}
+
+.badge-difficulty-AVANZADO {
+  color: #000000;
+  background: #e57373;
+  border: 1px solid #e57373;
+}
+
 .wizard {
   display: flex;
   flex-direction: column;
@@ -646,9 +664,20 @@ kbd {
   overflow: hidden;
 }
 
-.preview-editor {
-  min-width: 0;
+.preview-ide {
+  display: flex;
+  flex-direction: column;
   min-height: 420px;
+}
+
+.preview-editor {
+  flex: 1 1 220px;
+  min-height: 0;
+  max-height: 420px;
+}
+
+.preview-editor > div {
+  height: 100%;
 }
 
 .preview-actions {
@@ -742,6 +771,9 @@ kbd {
   min-height: 0;
 }
 
+/* Explorer sidebar styles: kept on purpose after removing the left "Archivos del
+   desafío" panel from the solve view (file navigation now lives in the top tab
+   bar). Preserved to avoid churn and for reuse if a file explorer returns. */
 .explorer {
   flex-shrink: 0;
   width: 220px;
@@ -996,6 +1028,39 @@ kbd {
 
 .student-submitted {
   max-width: 900px;
+}
+
+/* Result card: shared container for the submission outcome. For a genuine student
+   (ALUMNO) it renders centered with a summary only; teachers simulating the solve
+   keep the full JSON payload view. */
+.result-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.result-centered {
+  flex: 1;
+  min-height: 55vh;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.result-centered h2 {
+  margin: 0;
+}
+
+.result-centered .fail-block {
+  text-align: left;
+  width: 100%;
+}
+
+.result-centered .actions-bar {
+  justify-content: center;
 }
 
 .modal-backdrop {

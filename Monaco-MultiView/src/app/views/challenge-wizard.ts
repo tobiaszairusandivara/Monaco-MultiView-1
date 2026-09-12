@@ -18,7 +18,7 @@ import {
   type Draft,
   type Verdict,
 } from '../challenge-types';
-import { goBack, isRunnableSubtype, linesEqual, normalizeLines } from '../shared';
+import { fileNameOf, goBack, isRunnableSubtype, isTestFilePath, linesEqual, normalizeLines } from '../shared';
 import { formatTestFile } from '../test-formatter';
 import { BannerService } from '../services/banner.service';
 import { ChallengesService } from '../services/challenges.service';
@@ -162,7 +162,7 @@ interface PreviewVerdictState {
                       [class.active]="i === draftFileIndex()"
                       (click)="setDraftFile(i)"
                     >
-                      {{ file.path }}
+                      {{ fileNameOf(file.path) }}
                       @if (file.path !== (draft()?.entry ?? '')) {
                         <span
                           class="tab-remove"
@@ -246,8 +246,24 @@ interface PreviewVerdictState {
               <span class="badge badge-{{ wizardRisk() }}">riesgo {{ wizardRisk() }}</span>
             </header>
             <div class="preview-layout">
-              <div class="preview-editor">
-                <app-monaco-editor [value]="wizardEditorContent()" language="typescript" />
+              <div class="preview-ide">
+                <div class="workspace-tabs">
+                  @for (file of previewFiles(); track file.path) {
+                    <span
+                      class="file-tab mono"
+                      [class.active]="file.path === previewActivePath()"
+                      (click)="selectPreviewFile(file.path)"
+                    >
+                      {{ fileNameOf(file.path) }}
+                    </span>
+                  }
+                </div>
+                <app-monaco-editor
+                  class="preview-editor"
+                  [value]="wizardEditorContent()"
+                  language="typescript"
+                  (valueChange)="onWizardEditorInput($event)"
+                />
               </div>
             </div>
             <div class="output-box">
@@ -294,7 +310,7 @@ interface PreviewVerdictState {
               <button
                 type="button"
                 class="btn btn-primary"
-                [disabled]="previewCheckBusy() || !isRunnableSubtype(wizardSubtype())"
+                [disabled]="previewCheckBusy() || !previewEvaluable()"
                 (click)="runPreviewCompile()"
                 title="Compilar, ejecutar y verificar"
               >
@@ -306,7 +322,13 @@ interface PreviewVerdictState {
                 [disabled]="publishBusy()"
                 (click)="publish()"
               >
-                {{ publishBusy() ? 'Publicando…' : 'Publicar desafío' }}
+                {{
+                  publishBusy()
+                    ? 'Guardando…'
+                    : editingChallengeId()
+                      ? 'Confirmar edición y publicar'
+                      : 'Publicar desafío'
+                }}
               </button>
             </div>
           </div>
@@ -323,7 +345,7 @@ export class ChallengeWizardComponent implements OnInit {
   protected readonly subtypeMeta = SUBTYPE_META;
   protected readonly subtypeRisk = SUBTYPE_RISK;
   protected readonly templates = CHALLENGE_TEMPLATES;
-  protected readonly isRunnableSubtype = isRunnableSubtype;
+  protected readonly fileNameOf = fileNameOf;
 
   protected readonly wizardStage = signal<WizardStage>('Subtipo');
   protected readonly draft = signal<Draft | null>(null);
@@ -352,6 +374,15 @@ export class ChallengeWizardComponent implements OnInit {
     const subtype = this.draft()?.subtype;
     return subtype ? SUBTYPE_RISK[subtype] : 'MEDIO';
   });
+  protected readonly previewEvaluable = computed(
+    () => isRunnableSubtype(this.wizardSubtype()) || this.draft()?.runtime != null,
+  );
+  protected readonly previewFiles = computed(() =>
+    (this.draft()?.baseFiles ?? []).filter((file) => !isTestFilePath(file.path)),
+  );
+  protected readonly previewActivePath = computed(
+    () => this.draft()?.baseFiles[this.draftFileIndex()]?.path ?? '',
+  );
 
   private readonly router = inject(Router);
 
@@ -637,9 +668,23 @@ export class ChallengeWizardComponent implements OnInit {
     if (!this.validateContent()) {
       return;
     }
+    const files = this.draft()?.baseFiles ?? [];
+    const current = files[this.draftFileIndex()];
+    if (!current || isTestFilePath(current.path)) {
+      const entryIndex = files.findIndex((file) => file.path === (this.draft()?.entry ?? ''));
+      const firstIndex = files.findIndex((file) => !isTestFilePath(file.path));
+      this.draftFileIndex.set(entryIndex >= 0 ? entryIndex : Math.max(0, firstIndex));
+    }
     this.previewVerdict.set(null);
     this.previewOutputLines.set([]);
     this.wizardStage.set('Preview');
+  }
+
+  protected selectPreviewFile(path: string): void {
+    const index = (this.draft()?.baseFiles ?? []).findIndex((file) => file.path === path);
+    if (index >= 0) {
+      this.draftFileIndex.set(index);
+    }
   }
 
   protected async runPreviewCompile(): Promise<void> {

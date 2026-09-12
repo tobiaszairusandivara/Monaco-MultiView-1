@@ -30,7 +30,9 @@ const ROLES: Role[] = ['PROFESOR', 'ADMIN', 'ALUMNO'];
       }
 
       <main class="main">
-        <router-outlet />
+        @if (session.role() !== 'ADMIN') {
+          <router-outlet />
+        }
       </main>
     </div>
   `,

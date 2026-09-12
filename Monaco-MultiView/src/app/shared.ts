@@ -42,3 +42,18 @@ export function goBack(router: Router, fallback: unknown[] = ['/dashboard']): vo
     void router.navigate(fallback as never[]);
   }
 }
+
+export function fileNameOf(path: string): string {
+  const name = String(path ?? '').split(/[\\/]/).pop();
+  return name || path;
+}
+
+export function isTestFilePath(path: string): boolean {
+  const normalized = String(path ?? '').replace(/\\/g, '/');
+  const name = normalized.split('/').pop() ?? normalized;
+  return (
+    /(^|\/)(test|tests)\//.test(normalized) ||
+    /\.(test|spec)\.[a-z0-9]+$/i.test(name) ||
+    /(Test|Tests|TestCase)\.java$/i.test(name)
+  );
+}

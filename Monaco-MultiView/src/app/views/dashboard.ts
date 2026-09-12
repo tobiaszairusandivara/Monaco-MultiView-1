@@ -13,7 +13,9 @@ import { SessionService } from '../services/session.service';
       <div class="home-header">
         <div>
           <h2>{{ role() === 'ALUMNO' ? 'Desafíos disponibles' : 'Desafíos de mi curso' }}</h2>
-          <p class="muted">Cohorte {{ cohort }}</p>
+          @if (role() !== 'ALUMNO') {
+            <p class="muted">Cohorte {{ cohort }}</p>
+          }
         </div>
         @if (role() !== 'ALUMNO') {
           <button type="button" class="btn btn-primary" (click)="newChallenge()">+ Nuevo desafío</button>
@@ -30,7 +32,7 @@ import { SessionService } from '../services/session.service';
             <article class="card">
               <div class="card-top">
                 <span class="tag">{{ c.subtype }}</span>
-                <span class="badge badge-diff">{{ c.difficulty }}</span>
+                <span class="badge badge-diff badge-difficulty-{{ c.difficulty }}">{{ c.difficulty }}</span>
               </div>
               <h3 class="card-title">{{ c.title }}</h3>
               <p class="card-topic">{{ c.topic || 'Sin tema' }}</p>
