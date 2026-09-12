@@ -132,7 +132,9 @@ interface PreviewVerdictState {
                 [value]="draftNotes"
                 (input)="draftNotes = $any($event.target).value"
                 rows="3"
+                maxlength="200"
               ></textarea>
+              <p class="muted small">Máximo 200 caracteres.</p>
             </label>
             <footer class="wizard-footer">
               <button type="button" class="btn btn-secondary" (click)="goToStage('Subtipo')">

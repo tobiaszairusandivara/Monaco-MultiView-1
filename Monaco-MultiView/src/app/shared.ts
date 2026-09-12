@@ -57,3 +57,8 @@ export function isTestFilePath(path: string): boolean {
     /(Test|Tests|TestCase)\.java$/i.test(name)
   );
 }
+
+export function truncate(text: string, max: number): string {
+  const value = String(text ?? '');
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}

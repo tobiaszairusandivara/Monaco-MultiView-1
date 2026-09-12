@@ -1045,6 +1045,7 @@ async function listChallenges(req, res) {
     .filter((c) => !c.metadata?.softDeleted)
     .map(({ configuration, ...challenge }) => ({
       ...challenge,
+      notes: challenge.metadata?.notes ?? '',
       configuration: {
         language: configuration.language,
         entry: configuration.entry,

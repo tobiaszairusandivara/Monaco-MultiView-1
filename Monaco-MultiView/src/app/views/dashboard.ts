@@ -1,6 +1,7 @@
 import { Component, HostListener, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { DEFAULT_COHORT, type ChallengeListItem } from '../challenge-types';
+import { truncate } from '../shared';
 import { BannerService } from '../services/banner.service';
 import { ChallengesService } from '../services/challenges.service';
 import { SessionService } from '../services/session.service';
@@ -37,7 +38,7 @@ import { SessionService } from '../services/session.service';
               <h3 class="card-title">{{ c.title }}</h3>
               <p class="card-topic">{{ c.topic || 'Sin tema' }}</p>
               @if (c.notes) {
-                <p class="card-desc">{{ c.notes }}</p>
+                <p class="card-desc">{{ truncate(c.notes, 200) }}</p>
               }
               <div class="card-footer">
                 @if (role() === 'ALUMNO') {
@@ -94,6 +95,7 @@ export class DashboardComponent implements OnInit {
   protected readonly challenges = this.challengesService.list;
   protected readonly busy = this.challengesService.busy;
   protected readonly cohort = DEFAULT_COHORT;
+  protected readonly truncate = truncate;
   protected readonly deleteTarget = signal<ChallengeListItem | null>(null);
 
   @HostListener('window:keydown', ['$event'])
