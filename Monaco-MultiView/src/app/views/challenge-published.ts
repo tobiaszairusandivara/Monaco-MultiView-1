@@ -1,6 +1,6 @@
 import { Component, Input, OnInit, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { goBack, prettyJson } from '../shared';
+import { prettyJson } from '../shared';
 import { ChallengesService } from '../services/challenges.service';
 import { SessionService } from '../services/session.service';
 
@@ -66,7 +66,7 @@ export class ChallengePublishedComponent implements OnInit {
   }
 
   protected back(): void {
-    goBack(this.router);
+    this.toDashboard();
   }
 
   protected toDashboard(): void {

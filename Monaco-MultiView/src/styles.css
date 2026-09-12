@@ -331,6 +331,53 @@ kbd {
   border: 1px solid #e57373;
 }
 
+.badge-optional {
+  color: #ffffff;
+  background: #ffd54f;
+  border: 1px solid #ffd54f;
+}
+
+.badge-mandatory {
+  color: #ffffff;
+  background: #d32f2f;
+  border: 1px solid #d32f2f;
+}
+
+.optionality-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.optionality-toggle {
+  display: flex;
+  border: 1px solid #000000;
+}
+
+.toggle-opt {
+  padding: 6px 16px;
+  font-size: 13px;
+  color: #000000;
+  background: #ffffff;
+  border: none;
+  border-right: 1px solid #000000;
+  cursor: pointer;
+}
+
+.toggle-opt:last-child {
+  border-right: none;
+}
+
+.toggle-opt:hover {
+  background: #e5e5e5;
+}
+
+.toggle-opt.active {
+  color: #ffffff;
+  background: #000000;
+}
+
 .wizard {
   display: flex;
   flex-direction: column;
@@ -853,6 +900,32 @@ kbd {
   padding: 0;
   background: #ffffff;
   border-bottom: 1px solid #000000;
+}
+
+.tabs-zone {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.tabs-center {
+  flex-shrink: 0;
+  padding: 0 12px;
+}
+
+.tabs-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+}
+
+.countdown {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111111;
+  white-space: nowrap;
 }
 
 .file-tab {

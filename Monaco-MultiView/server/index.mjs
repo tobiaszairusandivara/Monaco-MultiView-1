@@ -51,6 +51,7 @@ const SEED_CHALLENGES = [
     topic: 'Algoritmos — sumatoria sobre arreglos',
     subtype: 'algorithms',
     difficulty: 'MEDIO',
+    mandatory: false,
     configuration: {
       language: 'typescript',
       entry: 'main.ts',
@@ -107,6 +108,7 @@ console.log(totalDelCarrito(carrito));
     topic: 'Strings — palíndromos',
     subtype: 'block-completion',
     difficulty: 'MEDIO',
+    mandatory: false,
     configuration: {
       language: 'typescript',
       entry: 'main.ts',
@@ -159,6 +161,7 @@ lineas.on('end', () => {
     topic: 'Arreglos — recorrido e índices',
     subtype: 'find-bug',
     difficulty: 'MEDIO',
+    mandatory: false,
     configuration: {
       language: 'typescript',
       entry: 'main.ts',
@@ -209,6 +212,7 @@ console.log(promedio(casoB));
     topic: 'Backend — Spring Boot, Maven y tests de integración',
     subtype: 'refactoring',
     difficulty: 'AVANZADO',
+    mandatory: false,
     configuration: {
       language: 'java',
       entry: 'pom.xml',
@@ -353,6 +357,7 @@ El sandbox ejecuta \`mvn test\`: se evalúa con los tests que Usted provee como 
     topic: 'Frontend — Angular moderno, Reactive Forms y standalones',
     subtype: 'modeling',
     difficulty: 'MEDIO',
+    mandatory: false,
     configuration: {
       language: 'typescript',
       entry: 'src/app/product-form.component.ts',
@@ -424,6 +429,7 @@ pendiente de un evaluador Angular en el sandbox.
     topic: 'Frontend — Angular Template Forms y validaciones',
     subtype: 'modeling',
     difficulty: 'MEDIO',
+    mandatory: false,
     configuration: {
       language: 'typescript',
       entry: 'src/app/order-form.component.ts',
@@ -486,6 +492,8 @@ evaluador Angular en el sandbox.
     topic: 'Frontend clásico — DOM, eventos y renderizado',
     subtype: 'hackathon',
     difficulty: 'BASICO',
+    mandatory: false,
+    durationMs: 5400000,
     configuration: {
       language: 'html',
       entry: 'index.html',
@@ -1018,6 +1026,16 @@ function validateChallengeInput(body) {
   if (body.difficulty && !DIFFICULTIES.includes(body.difficulty)) {
     errors.push('difficulty must be BASICO, MEDIO or AVANZADO.');
   }
+  if (body.mandatory !== undefined && typeof body.mandatory !== 'boolean') {
+    errors.push('mandatory must be a boolean.');
+  }
+  if (
+    body.durationMs !== undefined &&
+    body.durationMs !== null &&
+    (typeof body.durationMs !== 'number' || !Number.isInteger(body.durationMs) || body.durationMs <= 0)
+  ) {
+    errors.push('durationMs must be a positive integer or null.');
+  }
   const config = body.configuration ?? {};
   if (!config.language) errors.push('configuration.language is required.');
   if (!Array.isArray(config.baseFiles) || config.baseFiles.length === 0) {
@@ -1043,9 +1061,10 @@ async function listChallenges(req, res) {
   const challenges = await readCollection('challenges');
   const visible = challenges
     .filter((c) => !c.metadata?.softDeleted)
-    .map(({ configuration, ...challenge }) => ({
+.map(({ configuration, ...challenge }) => ({
       ...challenge,
       notes: challenge.metadata?.notes ?? '',
+      mandatory: challenge.mandatory ?? false,
       configuration: {
         language: configuration.language,
         entry: configuration.entry,
@@ -1091,6 +1110,8 @@ async function createChallenge(req, res) {
       topic: body.topic ?? '',
       subtype: body.subtype,
       difficulty: body.difficulty ?? 'BASICO',
+      mandatory: body.mandatory ?? archived.mandatory ?? false,
+      durationMs: body.durationMs ?? archived.durationMs ?? null,
       configuration: body.configuration,
     });
     archived.metadata = {
@@ -1112,6 +1133,8 @@ async function createChallenge(req, res) {
     topic: body.topic ?? '',
     subtype: body.subtype,
     difficulty: body.difficulty ?? 'BASICO',
+    mandatory: body.mandatory ?? false,
+    durationMs: body.durationMs ?? null,
     configuration: body.configuration,
     metadata: {
       version: 1,
@@ -1149,6 +1172,8 @@ async function updateChallenge(req, res, challengeId) {
     topic: body.topic ?? '',
     subtype: body.subtype,
     difficulty: body.difficulty ?? 'BASICO',
+    mandatory: body.mandatory ?? existing.mandatory ?? false,
+    durationMs: body.durationMs ?? existing.durationMs ?? null,
     configuration: body.configuration,
   });
   existing.metadata = {

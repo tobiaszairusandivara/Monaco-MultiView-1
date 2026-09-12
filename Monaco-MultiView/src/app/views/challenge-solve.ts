@@ -5,7 +5,7 @@ import { ChatPanel } from '../chat-panel';
 import { CompileService } from '../compile.service';
 import type { Challenge, ChatMessage, FailingTest, IntegrityEvent, Verdict } from '../challenge-types';
 import type { ProjectFile } from '../projects';
-import { fileNameOf, goBack, isRunnable, isTestFilePath, prettyJson, riskOf } from '../shared';
+import { fileNameOf, goBack, isRunnable, isTestFilePath, monacoLanguageOf, prettyJson, riskOf } from '../shared';
 import { BannerService } from '../services/banner.service';
 import { ChallengesService } from '../services/challenges.service';
 import { SessionService } from '../services/session.service';
@@ -17,6 +17,17 @@ interface CheckState {
   tests?: { passed: number; total: number } | null;
 }
 
+function formatCountdown(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return hours > 0
+    ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+    : `${pad(minutes)}:${pad(seconds)}`;
+}
+
 @Component({
   selector: 'app-challenge-solve',
   standalone: true,
@@ -25,7 +36,9 @@ interface CheckState {
     @if (challenge(); as challenge) {
       <section class="view student-ide">
         <header class="student-head">
-          <button type="button" class="btn btn-secondary" (click)="back()">← Volver</button>
+          @if (session.role() !== 'ALUMNO') {
+            <button type="button" class="btn btn-secondary" (click)="back()">← Volver</button>
+          }
           <h2>{{ challenge.title }}</h2>
           <span class="tag">{{ challenge.subtype }}</span>
           <span class="badge badge-diff badge-difficulty-{{ challenge.difficulty }}">{{ challenge.difficulty }}</span>
@@ -42,40 +55,50 @@ interface CheckState {
             <div class="ide-shell">
               <div class="ide-main">
                 <div class="workspace-tabs">
-                  @for (path of filePaths(); track path) {
-                    <span
-                      class="file-tab mono"
-                      [class.active]="path === activePath()"
-                      (click)="setActivePath(path)"
+                  <div class="tabs-zone">
+                    @for (path of filePaths(); track path) {
+                      <span
+                        class="file-tab mono"
+                        [class.active]="path === activePath()"
+                        (click)="setActivePath(path)"
+                      >
+                        {{ fileNameOf(path) }}
+                      </span>
+                    }
+                  </div>
+                  <div class="tabs-center">
+                    @if (countdownLabel()) {
+                      <span class="countdown mono" title="Tiempo límite restante">
+                        Tiempo restante: {{ countdownLabel() }}
+                      </span>
+                    }
+                  </div>
+                  <div class="tabs-actions">
+                    <button
+                      type="button"
+                      class="btn btn-primary"
+                      [disabled]="busy()"
+                      (click)="compile()"
+                      title="Compilar, ejecutar y verificar (F5)"
                     >
-                      {{ fileNameOf(path) }}
-                    </span>
-                  }
-                  <span class="spacer"></span>
-                  <button
-                    type="button"
-                    class="btn btn-primary"
-                    [disabled]="busy()"
-                    (click)="compile()"
-                    title="Compilar, ejecutar y verificar (F5)"
-                  >
-                    Compilar <kbd>F5</kbd>
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-success"
-                    [disabled]="busy()"
-                    (click)="submit()"
-                    title="Enviar resolución (Ctrl+S)"
-                  >
-                    Enviar <kbd>Ctrl+S</kbd>
-                  </button>
+                      Compilar <kbd>F5</kbd>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-success"
+                      [disabled]="busy()"
+                      (click)="submit()"
+                      title="Enviar resolución (Ctrl+S)"
+                    >
+                      Enviar <kbd>Ctrl+S</kbd>
+                    </button>
+                  </div>
                 </div>
 
                 <app-monaco-editor
                   class="student-editor"
                   [value]="activeContent()"
-                  language="typescript"
+                  [language]="monacoLanguageOf(activePath())"
                   (valueChange)="onEdit($event)"
                   (integrityEvent)="recordIntegrityEvent($event)"
                 />
@@ -161,6 +184,7 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
   protected readonly isRunnable = isRunnable;
   protected readonly prettyJson = prettyJson;
   protected readonly fileNameOf = fileNameOf;
+  protected readonly monacoLanguageOf = monacoLanguageOf;
 
   protected readonly challenge = signal<Challenge | null>(null);
   protected readonly notFound = signal(false);
@@ -171,6 +195,15 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
   protected readonly check = signal<CheckState | null>(null);
   protected transcript: ChatMessage[] = [];
   protected readonly integrityEvents = signal<IntegrityEvent[]>([]);
+  protected readonly countdownMs = signal<number | null>(null);
+  protected readonly countdownLabel = computed(() => {
+    const ms = this.countdownMs();
+    return ms == null ? '' : formatCountdown(ms);
+  });
+
+  private readonly countdownStorageKey = 'mmv-hack-';
+  private countdownTimer: ReturnType<typeof setInterval> | null = null;
+  private countdownDeadline = 0;
 
   private windowBlurred = false;
 
@@ -218,6 +251,7 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    this.stopCountdown();
   }
 
   protected recordIntegrityEvent(event: IntegrityEvent): void {
@@ -261,6 +295,7 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
       this.transcript = [];
       this.integrityEvents.set([]);
       this.windowBlurred = false;
+      this.startCountdown(challenge);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.banner.show(`No se pudo abrir el desafío: ${message}`);
@@ -268,6 +303,70 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  private startCountdown(challenge: Challenge): void {
+    this.stopCountdown();
+    this.countdownMs.set(null);
+    if (challenge.subtype !== 'hackathon' || challenge.durationMs == null || challenge.durationMs <= 0) {
+      return;
+    }
+    const key = `${this.countdownStorageKey}${challenge.challengeId}`;
+    let start = 0;
+    try {
+      const stored = sessionStorage.getItem(key);
+      if (stored) {
+        const parsed = JSON.parse(stored) as { start?: number; durationMs?: number } | null;
+        if (parsed && typeof parsed.start === 'number' && parsed.durationMs === challenge.durationMs) {
+          start = parsed.start;
+        }
+      }
+    } catch {
+      start = 0;
+    }
+    if (start <= 0) {
+      start = Date.now();
+      try {
+        sessionStorage.setItem(key, JSON.stringify({ start, durationMs: challenge.durationMs }));
+      } catch {
+        // sessionStorage no disponible: el contador no sobrevive a recargas.
+      }
+    }
+    this.countdownDeadline = start + challenge.durationMs;
+    this.stopCountdown();
+    this.updateCountdown();
+    this.countdownTimer = setInterval(() => this.updateCountdown(), 1000);
+  }
+
+  private stopCountdown(): void {
+    if (this.countdownTimer !== null) {
+      clearInterval(this.countdownTimer);
+      this.countdownTimer = null;
+    }
+  }
+
+  private updateCountdown(): void {
+    const remaining = this.countdownDeadline - Date.now();
+    if (remaining <= 0) {
+      this.countdownMs.set(0);
+      this.stopCountdown();
+      void this.onCountdownExpired();
+      return;
+    }
+    this.countdownMs.set(remaining);
+  }
+
+  private async onCountdownExpired(): Promise<void> {
+    const challenge = this.challenge();
+    if (!challenge) {
+      return;
+    }
+    if (this.busy()) {
+      setTimeout(() => void this.onCountdownExpired(), 500);
+      return;
+    }
+    this.banner.show('Tiempo agotado: se envió su resolución automáticamente.');
+    await this.submit();
   }
 
   protected back(): void {
@@ -408,6 +507,7 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
           },
         },
       });
+      sessionStorage.removeItem(`${this.countdownStorageKey}${challenge.challengeId}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.banner.show(`No se pudo enviar la resolución: ${message}`);

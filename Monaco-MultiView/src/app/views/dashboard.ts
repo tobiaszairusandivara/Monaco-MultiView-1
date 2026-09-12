@@ -34,6 +34,9 @@ import { SessionService } from '../services/session.service';
               <div class="card-top">
                 <span class="tag">{{ c.subtype }}</span>
                 <span class="badge badge-diff badge-difficulty-{{ c.difficulty }}">{{ c.difficulty }}</span>
+                <span class="badge badge-{{ c.mandatory ? 'mandatory' : 'optional' }}">
+                  {{ c.mandatory ? 'OBLIGATORIO' : 'OPCIONAL' }}
+                </span>
               </div>
               <h3 class="card-title">{{ c.title }}</h3>
               <p class="card-topic">{{ c.topic || 'Sin tema' }}</p>
@@ -42,7 +45,7 @@ import { SessionService } from '../services/session.service';
               }
               <div class="card-footer">
                 @if (role() === 'ALUMNO') {
-                  <button type="button" class="btn btn-primary" (click)="open(c)">Resolver</button>
+                  <button type="button" class="btn btn-primary" (click)="askSolve(c)">Resolver</button>
                 } @else {
                   <button type="button" class="btn btn-secondary" (click)="open(c)">Ver como alumno</button>
                   <button type="button" class="btn btn-secondary" (click)="edit(c)">Editar</button>
@@ -83,6 +86,27 @@ import { SessionService } from '../services/session.service';
         </div>
       </div>
     }
+
+    @if (solveTarget(); as target) {
+      <div class="modal-backdrop" (click)="cancelSolve()">
+        <div
+          class="modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="solve-modal-title"
+          (click)="$event.stopPropagation()"
+        >
+          <h3 id="solve-modal-title">¿Intentar resolver el desafío?</h3>
+          <p>
+            ¿Está seguro de que desea intentar resolver <strong>{{ target.title }}</strong>?
+          </p>
+          <div class="modal-actions">
+            <button type="button" class="btn" (click)="cancelSolve()">No</button>
+            <button type="button" class="btn btn-primary" (click)="confirmSolve()">Sí</button>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class DashboardComponent implements OnInit {
@@ -97,12 +121,20 @@ export class DashboardComponent implements OnInit {
   protected readonly cohort = DEFAULT_COHORT;
   protected readonly truncate = truncate;
   protected readonly deleteTarget = signal<ChallengeListItem | null>(null);
+  protected readonly solveTarget = signal<ChallengeListItem | null>(null);
 
   @HostListener('window:keydown', ['$event'])
   protected onWindowKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Escape' && this.deleteTarget()) {
+    if (event.key !== 'Escape') {
+      return;
+    }
+    if (this.deleteTarget()) {
       event.preventDefault();
       this.cancelDelete();
+    }
+    if (this.solveTarget()) {
+      event.preventDefault();
+      this.cancelSolve();
     }
   }
 
@@ -128,6 +160,22 @@ export class DashboardComponent implements OnInit {
 
   protected cancelDelete(): void {
     this.deleteTarget.set(null);
+  }
+
+  protected askSolve(item: ChallengeListItem): void {
+    this.solveTarget.set(item);
+  }
+
+  protected cancelSolve(): void {
+    this.solveTarget.set(null);
+  }
+
+  protected confirmSolve(): void {
+    const item = this.solveTarget();
+    if (item) {
+      this.cancelSolve();
+      this.open(item);
+    }
   }
 
   protected async confirmDelete(): Promise<void> {

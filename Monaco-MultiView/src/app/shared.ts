@@ -62,3 +62,45 @@ export function truncate(text: string, max: number): string {
   const value = String(text ?? '');
   return value.length > max ? `${value.slice(0, max)}…` : value;
 }
+
+export function monacoLanguageOf(path: string): string {
+  const ext = String(path ?? '').split('.').pop()?.toLowerCase() ?? '';
+  switch (ext) {
+    case 'ts':
+    case 'tsx':
+    case 'mts':
+    case 'cts':
+      return 'typescript';
+    case 'js':
+    case 'mjs':
+    case 'cjs':
+    case 'jsx':
+      return 'javascript';
+    case 'json':
+      return 'json';
+    case 'html':
+    case 'htm':
+      return 'html';
+    case 'css':
+      return 'css';
+    case 'scss':
+      return 'scss';
+    case 'less':
+      return 'less';
+    case 'java':
+      return 'java';
+    case 'xml':
+      return 'xml';
+    case 'md':
+    case 'markdown':
+      return 'markdown';
+    case 'properties':
+    case 'ini':
+      return 'ini';
+    case 'yaml':
+    case 'yml':
+      return 'yaml';
+    default:
+      return 'plaintext';
+  }
+}

@@ -17,7 +17,7 @@ import {
   type Draft,
   type Verdict,
 } from '../challenge-types';
-import { fileNameOf, goBack, isRunnableSubtype, isTestFilePath, linesEqual, normalizeLines } from '../shared';
+import { fileNameOf, isRunnableSubtype, isTestFilePath, linesEqual, monacoLanguageOf, normalizeLines } from '../shared';
 import { formatTestFile } from '../test-formatter';
 import { BannerService } from '../services/banner.service';
 import { ChallengesService } from '../services/challenges.service';
@@ -110,14 +110,43 @@ interface PreviewVerdictState {
                 placeholder="Ej: Total del carrito"
               />
             </label>
-            <label class="field">
-              <span>Tema / sección</span>
-              <input
-                [value]="draftTopic"
-                (input)="draftTopic = $any($event.target).value"
-                placeholder="Ej: Algoritmos — sumatoria"
-              />
-            </label>
+            <div class="optionality-bar">
+              <span class="muted">Obligatoriedad:</span>
+              <span class="optionality-toggle">
+                <button
+                  type="button"
+                  class="toggle-opt"
+                  [class.active]="!draftMandatory"
+                  (click)="draftMandatory = false"
+                >
+                  Opcional
+                </button>
+                <button
+                  type="button"
+                  class="toggle-opt"
+                  [class.active]="draftMandatory"
+                  (click)="draftMandatory = true"
+                >
+                  Obligatorio
+                </button>
+              </span>
+            </div>
+            @if (wizardSubtype() === 'hackathon') {
+              <label class="field">
+                <span>Tiempo límite (minutos)</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  [value]="draftDurationMinutes"
+                  (input)="onDurationMinutesChange($event)"
+                  placeholder="Ej: 90"
+                />
+                <p class="muted small">
+                  El contador arranca cuando el alumno abre el desafío y su resolución se envía automáticamente al agotarse.
+                </p>
+              </label>
+            }
             <label class="field">
               <span>Dificultad (RF-DES-04)</span>
               <select [value]="draftDifficulty" (change)="onDifficultyChange($event)">
@@ -125,6 +154,14 @@ interface PreviewVerdictState {
                 <option value="MEDIO">Medio</option>
                 <option value="AVANZADO">Avanzado</option>
               </select>
+            </label>
+            <label class="field">
+              <span>Tema / sección</span>
+              <input
+                [value]="draftTopic"
+                (input)="draftTopic = $any($event.target).value"
+                placeholder="Ej: Algoritmos — sumatoria"
+              />
             </label>
             <label class="field">
               <span>Descripción</span>
@@ -139,9 +176,6 @@ interface PreviewVerdictState {
             <footer class="wizard-footer">
               <button type="button" class="btn btn-secondary" (click)="goToStage('Subtipo')">
                 ← Anterior
-              </button>
-              <button type="button" class="btn btn-secondary" (click)="generateDraftWithAI()">
-                Generar borrador con IA
               </button>
               <button type="button" class="btn btn-primary" (click)="continueToContent()">
                 Continuar →
@@ -195,7 +229,7 @@ interface PreviewVerdictState {
                 </div>
                 <app-monaco-editor
                   [value]="wizardEditorContent()"
-                  language="typescript"
+                  [language]="monacoLanguageOf(wizardEditorPath())"
                   (valueChange)="onWizardEditorInput($event)"
                 />
               </div>
@@ -228,9 +262,6 @@ interface PreviewVerdictState {
             <footer class="wizard-footer">
               <button type="button" class="btn btn-secondary" (click)="goToStage('Datos')">
                 ← Anterior
-              </button>
-              <button type="button" class="btn btn-secondary" (click)="validateContentOnly()">
-                Validar
               </button>
               <button type="button" class="btn btn-primary" (click)="goToPreview()">
                 Vista previa →
@@ -272,7 +303,7 @@ interface PreviewVerdictState {
                 <app-monaco-editor
                   class="preview-editor"
                   [value]="wizardEditorContent()"
-                  language="typescript"
+                  [language]="monacoLanguageOf(wizardEditorPath())"
                   (valueChange)="onWizardEditorInput($event)"
                 />
               </div>
@@ -347,6 +378,7 @@ export class ChallengeWizardComponent implements OnInit {
   protected readonly subtypeRisk = SUBTYPE_RISK;
   protected readonly templates = CHALLENGE_TEMPLATES;
   protected readonly fileNameOf = fileNameOf;
+  protected readonly monacoLanguageOf = monacoLanguageOf;
 
   protected readonly wizardStage = signal<WizardStage>('Subtipo');
   protected readonly draft = signal<Draft | null>(null);
@@ -362,6 +394,8 @@ export class ChallengeWizardComponent implements OnInit {
   protected draftTopic = '';
   protected draftDifficulty: Difficulty = 'MEDIO';
   protected draftNotes = '';
+  protected draftMandatory = false;
+  protected draftDurationMinutes = 90;
 
   protected readonly wizardEditorContent = computed(() => {
     const draft = this.draft();
@@ -369,6 +403,10 @@ export class ChallengeWizardComponent implements OnInit {
       return '';
     }
     return draft.baseFiles[this.draftFileIndex()]?.content ?? '';
+  });
+  protected readonly wizardEditorPath = computed(() => {
+    const draft = this.draft();
+    return draft?.baseFiles[this.draftFileIndex()]?.path ?? '';
   });
   protected readonly wizardSubtype = computed(() => this.draft()?.subtype ?? null);
   protected readonly wizardRisk = computed(() => {
@@ -398,15 +436,13 @@ export class ChallengeWizardComponent implements OnInit {
   }
 
   protected back(): void {
-    const index = WIZARD_STAGES.indexOf(this.wizardStage());
-    if (index > 0) {
-      this.wizardStage.set(WIZARD_STAGES[index - 1]);
-      return;
-    }
-    goBack(this.router);
+    void this.router.navigate(['/dashboard']);
   }
 
   protected canVisit(stage: WizardStage): boolean {
+    if (this.editingChallengeId()) {
+      return true;
+    }
     return WIZARD_STAGES.indexOf(stage) <= WIZARD_STAGES.indexOf(this.wizardStage());
   }
 
@@ -427,6 +463,8 @@ export class ChallengeWizardComponent implements OnInit {
     this.draftTitle = draft.title;
     this.draftTopic = draft.topic;
     this.draftDifficulty = draft.difficulty;
+    this.draftMandatory = draft.mandatory;
+    this.draftDurationMinutes = this.minutesFromMs(draft.durationMs);
     this.draftNotes = draft.notes;
     this.newFilePath = '';
     this.contentErrors.set('');
@@ -442,6 +480,8 @@ export class ChallengeWizardComponent implements OnInit {
     this.draftTitle = draft.title;
     this.draftTopic = draft.topic;
     this.draftDifficulty = draft.difficulty;
+    this.draftMandatory = draft.mandatory;
+    this.draftDurationMinutes = this.minutesFromMs(draft.durationMs);
     this.draftNotes = draft.notes;
     this.newFilePath = '';
     this.contentErrors.set('');
@@ -460,6 +500,16 @@ export class ChallengeWizardComponent implements OnInit {
     this.draftDifficulty = (event.target as HTMLSelectElement).value as Difficulty;
   }
 
+  protected onDurationMinutesChange(event: Event): void {
+    const raw = (event.target as HTMLInputElement).value;
+    const minutes = Math.trunc(Number(raw));
+    this.draftDurationMinutes = Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
+  }
+
+  private minutesFromMs(durationMs: number | null | undefined): number {
+    return durationMs != null && durationMs > 0 ? Math.round(durationMs / 60000) : 0;
+  }
+
   private syncDetailsIntoDraft(): void {
     this.draft.update((d) =>
       d
@@ -468,6 +518,11 @@ export class ChallengeWizardComponent implements OnInit {
             title: this.draftTitle.trim(),
             topic: this.draftTopic.trim(),
             difficulty: this.draftDifficulty,
+            mandatory: this.draftMandatory,
+            durationMs:
+              this.wizardSubtype() === 'hackathon' && this.draftDurationMinutes > 0
+                ? this.draftDurationMinutes * 60 * 1000
+                : null,
             notes: this.draftNotes.trim(),
           }
         : d,
@@ -482,27 +537,6 @@ export class ChallengeWizardComponent implements OnInit {
     this.syncDetailsIntoDraft();
     this.draftFileIndex.set(0);
     this.contentErrors.set('');
-    this.wizardStage.set('Contenido');
-  }
-
-  protected generateDraftWithAI(): void {
-    const current = this.draft();
-    if (!current) {
-      return;
-    }
-    const generated = newDraft(current.subtype, current.courseCohortId);
-    this.draft.update((d) =>
-      d
-        ? {
-            ...d,
-            baseFiles: generated.baseFiles,
-            hiddenTestsText: generated.hiddenTestsText,
-            expectedSolutionText: generated.expectedSolutionText,
-          }
-        : d,
-    );
-    this.draftFileIndex.set(0);
-    this.banner.show('Borrador generado por IA (simulado). Revisá el código y los tests ocultos.');
     this.wizardStage.set('Contenido');
   }
 
@@ -659,10 +693,6 @@ export class ChallengeWizardComponent implements OnInit {
     }
     this.contentErrors.set('');
     return true;
-  }
-
-  protected validateContentOnly(): void {
-    this.validateContent();
   }
 
   protected goToPreview(): void {
@@ -851,6 +881,8 @@ export class ChallengeWizardComponent implements OnInit {
         topic: draft.topic,
         subtype: draft.subtype,
         difficulty: draft.difficulty,
+        mandatory: draft.mandatory,
+        durationMs: draft.durationMs,
         notes: draft.notes,
         materialDocs: draft.materialDocs,
         configuration: {
@@ -886,6 +918,8 @@ export class ChallengeWizardComponent implements OnInit {
       this.draftTitle = challenge.title;
       this.draftTopic = challenge.topic ?? '';
       this.draftDifficulty = challenge.difficulty;
+      this.draftMandatory = challenge.mandatory ?? false;
+      this.draftDurationMinutes = this.minutesFromMs(challenge.durationMs);
       this.draftNotes = challenge.metadata?.notes ?? '';
       this.newFilePath = '';
       this.contentErrors.set('');
@@ -906,7 +940,9 @@ export class ChallengeWizardComponent implements OnInit {
       title: challenge.title,
       topic: challenge.topic ?? '',
       difficulty: challenge.difficulty,
+      mandatory: challenge.mandatory ?? false,
       subtype: challenge.subtype,
+      durationMs: challenge.durationMs ?? null,
       notes: challenge.metadata?.notes ?? '',
       materialDocs: [...(challenge.metadata?.materialDocs ?? [])],
       language: 'typescript',

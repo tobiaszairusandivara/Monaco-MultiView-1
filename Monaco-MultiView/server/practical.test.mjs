@@ -193,6 +193,91 @@ describe('create and list challenges (G05-E01-US01)', () => {
   });
 });
 
+describe('durationMs nullable validation (regression: editar un desafío no-hackathon)', () => {
+  test('POST accepts durationMs: null and persists it', async () => {
+    const id = `test-duration-null-${Date.now()}`;
+    const { status, body } = await request('/api/challenges', {
+      method: 'POST',
+      body: {
+        challengeId: id,
+        courseCohortId: 'TUP-2026-02',
+        title: 'Refactor base',
+        topic: 'Refactoring',
+        subtype: 'refactoring',
+        difficulty: 'MEDIO',
+        mandatory: false,
+        durationMs: null,
+        configuration: {
+          language: 'typescript',
+          entry: 'main.ts',
+          baseFiles: [{ path: 'main.ts', content: '// codigo a refactorizar' }],
+          hiddenTests: [],
+          expectedSolution: '',
+        },
+      },
+    });
+    assert.equal(status, 201);
+    assert.equal(body.challenge.durationMs, null);
+  });
+
+  test('PUT on a non-hackathon challenge with durationMs: null does not fail (regression)', async () => {
+    const id = `test-duration-update-${Date.now()}`;
+    const base = {
+      challengeId: id,
+      courseCohortId: 'TUP-2026-02',
+      title: 'Algoritmo base',
+      topic: 'Basicos',
+      subtype: 'algorithms',
+      difficulty: 'BASICO',
+      mandatory: true,
+      durationMs: null,
+      configuration: {
+        language: 'typescript',
+        entry: 'main.ts',
+        baseFiles: [{ path: 'main.ts', content: 'console.log(1 + 1);' }],
+        hiddenTests: [{ name: 'suma', expected: '2' }],
+        expectedSolution: 'console.log(1 + 1);',
+      },
+    };
+    const created = await request('/api/challenges', { method: 'POST', body: base });
+    assert.equal(created.status, 201);
+    const { status, body } = await request(`/api/challenges/${id}`, {
+      method: 'PUT',
+      body: { ...base, title: 'Algoritmo corregido', durationMs: null },
+    });
+    assert.equal(status, 200);
+    assert.equal(body.challenge.title, 'Algoritmo corregido');
+    assert.equal(body.challenge.durationMs, null);
+  });
+
+  test('hackathon seed exposes its time limit', async () => {
+    const challenge = await fullChallenge('frt-tienda-clasica-js');
+    assert.equal(challenge.durationMs, 5400000);
+  });
+
+  test('POST rejects a negative durationMs with 400', async () => {
+    const { status, body } = await request('/api/challenges', {
+      method: 'POST',
+      body: {
+        challengeId: `test-duration-bad-${Date.now()}`,
+        courseCohortId: 'TUP-2026-02',
+        title: 'Mal',
+        subtype: 'hackathon',
+        difficulty: 'BASICO',
+        durationMs: -1,
+        configuration: {
+          language: 'typescript',
+          entry: 'main.ts',
+          baseFiles: [{ path: 'main.ts', content: 'console.log(1);' }],
+          hiddenTests: [],
+        },
+      },
+    });
+    assert.equal(status, 400);
+    assert.ok(body.errors.some((e) => e.includes('durationMs')));
+  });
+});
+
 describe('execution and verdicts (G05-E02)', () => {
   test('expected solution for algorithms seed is SUPERADO', async () => {
     const challenge = await fullChallenge('dsa-total-carrito-medio');

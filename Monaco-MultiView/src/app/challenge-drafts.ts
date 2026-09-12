@@ -121,6 +121,335 @@ Escriba acá el enunciado, criterios de evaluación y material de referencia.
 2. Criterio de evaluación B.
 `;
 
+const REFACTORING_BASE = `// El código funciona pero tiene problemas de diseño. Refactorícelo sin cambiar
+// su comportamiento: nombres, duplicación, constantes mágicas y responsabilidades.
+
+function calc(precio: number, cant: number): number {
+  let d = 0;
+  if (cant > 100) {
+    d = precio * 0.1;
+  } else if (cant > 50) {
+    d = precio * 0.05;
+  }
+  const x = precio - d;
+  const t = x * 1.21; // IVA
+  return Math.round(t * 100) / 100;
+}
+
+const precioA = 200;
+const cantA = 60;
+const precioB = 150;
+const cantB = 200;
+
+console.log(calc(precioA, cantA));
+console.log(calc(precioB, cantB));
+`;
+
+const REFACTORING_SOLUTION = `const IVA = 0.21;
+
+function descuentoPorCantidad(cantidad: number): number {
+  if (cantidad > 100) return 0.1;
+  if (cantidad > 50) return 0.05;
+  return 0;
+}
+
+function aplicarDescuento(precio: number, cantidad: number): number {
+  return precio * (1 - descuentoPorCantidad(cantidad));
+}
+
+function totalConIva(precioConDescuento: number): number {
+  return Math.round(precioConDescuento * (1 + IVA) * 100) / 100;
+}
+
+function calcularTotal(precio: number, cantidad: number): number {
+  return totalConIva(aplicarDescuento(precio, cantidad));
+}
+
+const precioA = 200;
+const cantA = 60;
+const precioB = 150;
+const cantB = 200;
+
+console.log(calcularTotal(precioA, cantA));
+console.log(calcularTotal(precioB, cantB));
+`;
+
+const HACKATHON_BASE = `// Hackathon: construya el recomendador musical de la consigna.
+// Dado un catálogo y un clima, devuelva las canciones que mejor combinan.
+// Sea creativo: defina los criterios, justifique las reglas y agregue al
+// menos una función extra (valen puntos por originalidad).
+
+interface Cancion {
+  titulo: string;
+  genero: string;
+  energia: number; // de 0 a 10
+  duracionSeg: number;
+}
+
+const CATALOGO: Cancion[] = [
+  { titulo: 'Noches de jazz', genero: 'jazz', energia: 3, duracionSeg: 210 },
+  { titulo: 'Ritmo soleado', genero: 'pop', energia: 7, duracionSeg: 185 },
+  { titulo: 'Motor salvaje', genero: 'rock', energia: 9, duracionSeg: 245 },
+  { titulo: 'Pista del futuro', genero: 'electro', energia: 8, duracionSeg: 200 },
+];
+
+function recomendarPara(clima: string, canciones: Cancion[]): Cancion[] {
+  // TODO: implemente las reglas de recomendación según el clima.
+  return [];
+}
+
+const clima = 'lluvioso';
+const playlist = recomendarPara(clima, CATALOGO);
+console.log(\`Playlist para un día \${clima}:\`);
+for (const cancion of playlist) {
+  console.log(\`- \${cancion.titulo} (\${cancion.genero})\`);
+}
+`;
+
+const HACKATHON_SOLUTION = `interface Cancion {
+  titulo: string;
+  genero: string;
+  energia: number;
+  duracionSeg: number;
+}
+
+const CATALOGO: Cancion[] = [
+  { titulo: 'Noches de jazz', genero: 'jazz', energia: 3, duracionSeg: 210 },
+  { titulo: 'Ritmo soleado', genero: 'pop', energia: 7, duracionSeg: 185 },
+  { titulo: 'Motor salvaje', genero: 'rock', energia: 9, duracionSeg: 245 },
+  { titulo: 'Pista del futuro', genero: 'electro', energia: 8, duracionSeg: 200 },
+];
+
+const GENERO_POR_CLIMA: Record<string, string> = {
+  lluvioso: 'jazz',
+  soleado: 'pop',
+  nublado: 'rock',
+  festivo: 'electro',
+};
+
+function recomendarPara(clima: string, canciones: Cancion[]): Cancion[] {
+  const genero = GENERO_POR_CLIMA[clima] ?? 'pop';
+  return canciones
+    .filter((cancion) => cancion.genero === genero)
+    .sort((a, b) => b.energia - a.energia);
+}
+
+const clima = 'lluvioso';
+const playlist = recomendarPara(clima, CATALOGO);
+console.log(\`Playlist para un día \${clima}:\`);
+for (const cancion of playlist) {
+  console.log(\`- \${cancion.titulo} (\${cancion.genero})\`);
+}
+`;
+
+const MODELING_BASE = `// Modelado de dominio: complete las reglas de préstamo de una biblioteca.
+//
+// Reglas de negocio:
+//  1. Un usuario puede tener hasta 3 préstamos vigentes a la vez.
+//  2. Un préstamo vence a los 14 días de iniciado.
+//  3. Una copia solo se presta si está DISPONIBLE.
+
+type EstadoCopia = 'DISPONIBLE' | 'PRESTADA' | 'EN_REPARACION';
+
+interface Libro {
+  isbn: string;
+  titulo: string;
+  autor: string;
+}
+
+interface Copia {
+  codigo: string;
+  libro: Libro;
+  estado: EstadoCopia;
+}
+
+interface Prestamo {
+  copia: Copia;
+  usuario: string;
+  fechaInicio: string; // ISO yyyy-mm-dd
+  fechaVencimiento: string; // ISO yyyy-mm-dd
+}
+
+const DIAS_DE_PRESTAMO = 14;
+
+function hoy(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function sumarDias(fecha: string, dias: number): string {
+  const fechaObj = new Date(\`\${fecha}T00:00:00Z\`);
+  fechaObj.setUTCDate(fechaObj.getUTCDate() + dias);
+  return fechaObj.toISOString().slice(0, 10);
+}
+
+function estaVigente(prestamo: Prestamo, fecha: string): boolean {
+  return prestamo.fechaVencimiento >= fecha;
+}
+
+function prestar(copia: Copia, usuario: string, prestamos: Prestamo[]): Prestamo | null {
+  // TODO: aplique las reglas 1, 2 y 3 y devuelva el préstamo creado (o null).
+  return null;
+}
+
+const libros = {
+  principito: { isbn: '978-15', titulo: 'El Principito', autor: 'Saint-Exupéry' },
+  dune: { isbn: '978-16', titulo: 'Dune', autor: 'Frank Herbert' },
+};
+
+const copia: Copia = { codigo: 'B-01', libro: libros.principito, estado: 'DISPONIBLE' };
+const prestamo = prestar(copia, 'alumno-demo', []);
+console.log(
+  prestamo
+    ? \`Préstamo de "\${prestamo.copia.libro.titulo}" a \${prestamo.usuario} (\${DIAS_DE_PRESTAMO} días).\`
+    : 'No se pudo prestar.',
+);
+
+const copiaOcupada: Copia = { codigo: 'B-02', libro: libros.dune, estado: 'PRESTADA' };
+const fallido = prestar(copiaOcupada, 'alumno-demo', []);
+console.log(fallido ? 'Segundo préstamo.' : 'No se pudo prestar la copia ocupada.');
+`;
+
+const MODELING_SOLUTION = `type EstadoCopia = 'DISPONIBLE' | 'PRESTADA' | 'EN_REPARACION';
+
+interface Libro {
+  isbn: string;
+  titulo: string;
+  autor: string;
+}
+
+interface Copia {
+  codigo: string;
+  libro: Libro;
+  estado: EstadoCopia;
+}
+
+interface Prestamo {
+  copia: Copia;
+  usuario: string;
+  fechaInicio: string;
+  fechaVencimiento: string;
+}
+
+const DIAS_DE_PRESTAMO = 14;
+const MAX_PRESTAMOS_VIGENTES = 3;
+
+function hoy(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function sumarDias(fecha: string, dias: number): string {
+  const fechaObj = new Date(\`\${fecha}T00:00:00Z\`);
+  fechaObj.setUTCDate(fechaObj.getUTCDate() + dias);
+  return fechaObj.toISOString().slice(0, 10);
+}
+
+function estaVigente(prestamo: Prestamo, fecha: string): boolean {
+  return prestamo.fechaVencimiento >= fecha;
+}
+
+function prestar(copia: Copia, usuario: string, prestamos: Prestamo[]): Prestamo | null {
+  const vigentes = prestamos.filter((p) => p.usuario === usuario && estaVigente(p, hoy()));
+  if (copia.estado !== 'DISPONIBLE' || vigentes.length >= MAX_PRESTAMOS_VIGENTES) {
+    return null;
+  }
+  return {
+    copia,
+    usuario,
+    fechaInicio: hoy(),
+    fechaVencimiento: sumarDias(hoy(), DIAS_DE_PRESTAMO),
+  };
+}
+
+const libros = {
+  principito: { isbn: '978-15', titulo: 'El Principito', autor: 'Saint-Exupéry' },
+  dune: { isbn: '978-16', titulo: 'Dune', autor: 'Frank Herbert' },
+};
+
+const copia: Copia = { codigo: 'B-01', libro: libros.principito, estado: 'DISPONIBLE' };
+const prestamo = prestar(copia, 'alumno-demo', []);
+console.log(
+  prestamo
+    ? \`Préstamo de "\${prestamo.copia.libro.titulo}" a \${prestamo.usuario} (\${DIAS_DE_PRESTAMO} días).\`
+    : 'No se pudo prestar.',
+);
+
+const copiaOcupada: Copia = { codigo: 'B-02', libro: libros.dune, estado: 'PRESTADA' };
+const fallido = prestar(copiaOcupada, 'alumno-demo', []);
+console.log(fallido ? 'Segundo préstamo.' : 'No se pudo prestar la copia ocupada.');
+`;
+
+const CODE_REVIEW_BASE = `// Code review: evalúe el siguiente código y proponga mejoras.
+// Escriba su revisión como comentarios "// REVISIÓN:" debajo de cada punto
+// mejorable (nombres, duplicación, validaciones, errores, idioma).
+
+function m(x: number, y: number): number {
+  let p = 1;
+  for (let i = 0; i < y; i++) {
+    p *= x;
+  }
+  // REVISIÓN: (escriba acá su hallazgo y la mejora sugerida)
+  return p;
+}
+
+function dividir(a: number, b: number): number {
+  // REVISIÓN: (escriba acá su hallazgo y la mejora sugerida)
+  return a / b;
+}
+
+function procesar(numeros: number[]): void {
+  let total = 0;
+  let cantidad = 0;
+  for (const n of numeros) {
+    total += n;
+    cantidad++;
+  }
+  const promedio = total / cantidad;
+  console.log('El promedio es ' + promedio);
+}
+
+procesar([3, 5, 7]);
+console.log(m(2, 3));
+console.log(dividir(10, 0));
+`;
+
+const CODE_REVIEW_SOLUTION = `// Revisión aplicada: nombres claros, validación de entradas y casos borde.
+
+function potencia(base: number, exponente: number): number {
+  // REVISIÓN: [Nombres] "m/x/y/p" no comunican intención. Se renombró la función.
+  if (exponente < 0) {
+    throw new Error('El exponente no puede ser negativo.');
+  }
+  let resultado = 1;
+  for (let i = 0; i < exponente; i++) {
+    resultado *= base;
+  }
+  return resultado;
+}
+
+function dividir(numerador: number, denominador: number): number {
+  // REVISIÓN: [Robustez] dividir(10, 0) devuelve Infinity. Se valida el denominador.
+  if (denominador === 0) {
+    throw new Error('No se puede dividir por cero.');
+  }
+  return numerador / denominador;
+}
+
+function procesar(numeros: number[]): void {
+  // REVISIÓN: [Caso borde] con un arreglo vacío el promedio da NaN.
+  if (numeros.length === 0) {
+    console.log('No hay números para procesar.');
+    return;
+  }
+  const total = numeros.reduce((acc, n) => acc + n, 0);
+  const promedio = total / numeros.length;
+  console.log(\`El promedio es \${promedio}\`);
+}
+
+procesar([3, 5, 7]);
+console.log(potencia(2, 3));
+console.log(dividir(10, 2));
+`;
+
 const DEFAULT_TESTS = (subtype: ChallengeSubtype): string => {
   switch (subtype) {
     case 'algorithms':
@@ -136,10 +465,53 @@ const DEFAULT_TESTS = (subtype: ChallengeSubtype): string => {
       );
     case 'find-bug':
       return JSON.stringify([{ name: 'salida completa esperada', expected: '4\n6' }], null, 2);
+    case 'refactoring':
+      return JSON.stringify(
+        [
+          { name: 'salida completa esperada', expected: '229.9\n163.35' },
+          { name: 'sin descuento (cantidad <= 50)', expected: '121' },
+        ],
+        null,
+        2,
+      );
+    case 'hackathon':
+      return JSON.stringify(
+        [
+          {
+            name: 'salida completa esperada',
+            expected: 'Playlist para un día lluvioso:\n- Noches de jazz (jazz)',
+          },
+          {
+            name: 'clima soleado: pop',
+            expected: 'Playlist para un día soleado:\n- Ritmo soleado (pop)',
+          },
+        ],
+        null,
+        2,
+      );
+    case 'modeling':
+      return JSON.stringify(
+        [
+          {
+            name: 'salida completa esperada',
+            expected: 'Préstamo de "El Principito" a alumno-demo (14 días).\nNo se pudo prestar la copia ocupada.',
+          },
+        ],
+        null,
+        2,
+      );
+    case 'code-review':
+      return JSON.stringify(
+        [{ name: 'salida completa esperada', expected: 'El promedio es 5\n8\n5' }],
+        null,
+        2,
+      );
     default:
       return '[]';
   }
 };
+
+export const HACKATHON_DEFAULT_DURATION_MS = 90 * 60 * 1000;
 
 function templateFor(subtype: ChallengeSubtype): { base?: string; solution?: string } {
   switch (subtype) {
@@ -149,11 +521,21 @@ function templateFor(subtype: ChallengeSubtype): { base?: string; solution?: str
       return { base: BLOCK_BASE, solution: BLOCK_SOLUTION };
     case 'find-bug':
       return { base: FIND_BUG_BASE, solution: FIND_BUG_SOLUTION };
-    default:
+    case 'refactoring':
+      return { base: REFACTORING_BASE, solution: REFACTORING_SOLUTION };
+    case 'hackathon':
+      return { base: HACKATHON_BASE, solution: HACKATHON_SOLUTION };
+    case 'modeling':
+      return { base: MODELING_BASE, solution: MODELING_SOLUTION };
+    case 'code-review':
+      return { base: CODE_REVIEW_BASE, solution: CODE_REVIEW_SOLUTION };
+    default: {
+      const other = subtype as ChallengeSubtype;
       return {
-        base: CONSIGNA_README(SUBTYPE_META[subtype].label, subtype),
+        base: CONSIGNA_README(SUBTYPE_META[other].label, other),
         solution: '',
       };
+    }
   }
 }
 
@@ -165,7 +547,9 @@ export function newDraft(subtype: ChallengeSubtype, courseCohortId = DEFAULT_COH
     title: SUBTYPE_META[subtype].label,
     topic: SUBTYPE_META[subtype].label,
     difficulty: 'MEDIO',
+    mandatory: false,
     subtype,
+    durationMs: subtype === 'hackathon' ? HACKATHON_DEFAULT_DURATION_MS : null,
     notes: '',
     materialDocs: [],
     language: 'typescript',
@@ -608,7 +992,9 @@ export function templateDraft(template: ChallengeTemplate, courseCohortId = DEFA
     title: stack.title,
     topic: stack.topic,
     difficulty: stack.difficulty,
+    mandatory: false,
     subtype: template.subtype,
+    durationMs: template.subtype === 'hackathon' ? HACKATHON_DEFAULT_DURATION_MS : null,
     notes: template.runtime
       ? `Plantilla multi-archivo evaluada con el sandbox (${template.runtime}).`
       : 'Plantilla multi-archivo de consigna (la corrección depende de un evaluador especializado).',

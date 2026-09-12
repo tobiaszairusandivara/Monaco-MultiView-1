@@ -8,6 +8,18 @@ self.MonacoEnvironment = {
           type: 'module',
           name: label,
         });
+      case 'html':
+        return new Worker(new URL('./workers/html.worker.ts', import.meta.url), {
+          type: 'module',
+          name: label,
+        });
+      case 'css':
+      case 'scss':
+      case 'less':
+        return new Worker(new URL('./workers/css.worker.ts', import.meta.url), {
+          type: 'module',
+          name: label,
+        });
       case 'typescript':
       case 'javascript':
         return new Worker(new URL('./workers/ts.worker.ts', import.meta.url), {

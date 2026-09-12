@@ -1,104 +1,149 @@
-# MonacoMultiView
+# Monaco MultiView — Desafíos Prácticos (G5)
 
-Browser IDE with a VS Code-like layout: file explorer, Monaco editor on top, and an output console at the bottom (with a draggable separator).
+Prototype of the **"Motor de Desafíos Prácticos"** (Grupo 5) for the UTN TUP gamified learning platform. It evolved from a Monaco IDE sandbox into a full challenge production and solving platform: challenge authoring in a 4-step wizard, CRUD, sandbox code execution, hidden-test evaluation, anti-cheat integrity signals, an AI tutor chat and an IDE for solving challenges.
 
-> **Purpose**: this project is meant to **test Monaco's capabilities**, not to be used as-is on a server. It is not performant; it is a small test environment that could be reused at some point. See [TODO.md](TODO.md) for planned work (real domain challenges, realistic examples, basic execution tests).
+## What it does
 
-Compiles and runs:
+- **Challenge authoring wizard** (`Challenges → Nuevo desafío`): pick a subtype (algorithm, block-completion, find-bug, refactoring, hackathon, modeling, code-review), fill metadata + hidden tests, preview-run, and publish. Templates exportable/pasteable into the "Motor G3" gateway payload.
+- **Challenge CRUD**: list, view, edit (bumps `metadata.version`), soft delete (reversible by an admin).
+- **Sandbox execution** through the Node backend:
+  - **TypeScript / JavaScript** — bundled with esbuild, runs on Node (stdin supported).
+  - **Java** — compiled with `javac`, run with `java`.
+  - **`maven-test` runtime** — runs a real `mvn test` and parses Surefire reports.
+  - **`node-spec` runtime** — installs jsdom and runs `node --test` (TAP parsed).
+- **Evaluation**: LeetCode-style — only the first failing hidden test is exposed to the student; the full test set and `expectedSolution` never leave the server.
+- **Anti-cheat integrity**: a pure function (`assessIntegrityRisk`) grades `COPY / PASTE / WINDOW_BLUR / WINDOW_FOCUS` events into `NONE / LOW / MEDIUM / HIGH` risk (e.g. `COPY → FOCUS_LOST → PASTE` = `HIGH`).
+- **AI tutor chat**: floating chat panel wired to `POST /api/chat` (stub provider by default, Ollama optional). Risk level is always derived server-side.
+- **Role-simulated views**: a header selector switches between `PROFESOR`, `ADMIN` and `ALUMNO` (no real auth — it's a prototype shell).
 
-- **TypeScript (single file)**: with the Monaco worker, 100% in the browser.
-- **TypeScript (multi-file)**: bundling with esbuild through the local server.
-- **Simple Java** (`*.java`): with `javac` / `java`.
-- **Spring Boot** (with `pom.xml`): with Maven, streaming logs live and leaving the app running until you press **Stop** (if you press **Compile** again while a run is active, it automatically stops it first). The demo runs at `http://localhost:8080` and can be tested from Swagger UI (`http://localhost:8080/swagger-ui.html`).
+## Tech stack
 
-Requires **Node >= 18**, **JDK 21** and **Maven** installed and on the PATH.
+| Layer | Technology |
+|---|---|
+| Frontend | Angular 22 (standalone components, signals, `inject()`, new `@if/@for/@switch` control flow) + Monaco Editor |
+| API calls | Plain `fetch` via `src/app/compile.service.ts` (no `HttpClient`) |
+| Backend | Plain Node ESM (`server/*.mjs`, no framework, no Express) |
+| Build | `@angular/build` (esbuild-based); Monaco workers for TS/JSON/editor |
+| Sandbox runtimes | Node, `javac`/`java`, Maven, jsdom + `node --test` |
 
-## Development
+## Requirements
 
-The easiest way is **a single command** that starts the compilation server and the frontend together:
+- **Node >= 18** (npm 11 via `packageManager: npm@11.19.0`)
+- **JDK 21** and **Maven** on the PATH (Java sandbox + `maven-test` challenges)
+- On Windows the server launches Maven/NPM via `cmd /c mvn.cmd` / `npm.cmd`.
+
+> Note: `esbuild` is used by the backend (for TS bundling) but arrives transitively through `@angular/build`; it is not a direct dependency of `package.json`.
+
+## Quick start
 
 ```bash
+npm install
 npm run dev
 ```
 
-You can also start them separately, in two terminals:
+`npm run dev` starts the API (**port 3100**) and the Angular dev server together on a free port (the URL is printed in the console). Open it and sign in as whatever role you want.
+
+Alternatively, in two terminals:
 
 ```bash
-# Terminal 1: compilation server (Node, port 3100)
+# Terminal 1: API only (port 3100)
 npm run server
 
-# Terminal 2: frontend (Angular, port 4200)
+# Terminal 2: frontend (port 4200)
 npm start
 ```
 
-Then open `http://localhost:4200/`. In the toolbar you can pick between the example projects (Simple TypeScript, Simple Java, and Spring Boot Backend). The first Spring Boot compilation downloads Maven dependencies and may take a while.
+Open `http://localhost:4200/`. The frontend proxies `/api` to `http://localhost:3100` via `proxy.conf.json`.
 
-IDE features:
+The first time you run a `maven-test` challenge it downloads Maven dependencies and may take a while. If `server/data/challenges.json` is emptied/deleted, the 7 seed challenges are re-inserted on the next boot.
 
-- **Code zoom**: `Ctrl + scroll` over the editor, or the `A-` / `A+` / `100%` buttons in the editor header.
-- **Collapsible explorer**: when collapsed, it leaves a narrow bar with one icon per file type in the project (TS, Java, XML, properties...).
-- **Resizable panels**: editor and console grow/shrink by dragging the separator, with a 120px minimum for each, without breaking the layout.
+## Available scripts
 
-## Development server (details)
+| Command | What it does |
+|---|---|
+| `npm run dev` | API (3100) + Angular dev server together (free port) |
+| `npm start` | Angular dev server only (port 4200) |
+| `npm run server` | Node API only (port 3100) |
+| `npm run build` | Production build (`ng build`); the closest thing to a typecheck |
+| `npm run watch` | `ng build --watch --configuration development` |
+| `npm test` | **NOT wired**: `angular.json` has no `test` target and there are no `*.spec.ts` files. Real tests live at `server/practical.test.mjs` |
 
-The frontend uses `@angular/build:dev-server` with a proxy (`proxy.conf.json`) that forwards `/api` to the local server at `http://localhost:3100`.
+## Tests
 
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+The only real test suite is the integration one on the backend:
 
 ```bash
-ng generate --help
+node --test server/practical.test.mjs
 ```
 
-## Building
+It spawns the API on **port 3901** with a temporary `MMV_DATA_DIR` and covers seeding, CRUD, executions, submissions, integrity risk and chat. It is slow: the seeds run a real `mvn test` (needs a warm `~/.m2`) and an `npm install jsdom` + `node --test`.
 
-To build the project run:
+## API overview
 
-```bash
-ng build
+`server/index.mjs` routes requests through a single `handleRequest` (CORS enabled, JSON bodies up to 20 MB). Main endpoints:
+
+| Method | Route | Purpose |
+|---|---|---|
+| `GET` | `/api/status` | Server health + whether a Java run is active |
+| `POST` | `/api/ts/compile` | esbuild bundle TS/JS → CJS |
+| `POST` | `/api/java/compile` | `javac` compilation |
+| `POST` | `/api/java/run` | Run Java, streaming stdout (chunked, abortable) |
+| `POST` | `/api/java/stop` | Kill an active Java run |
+| `GET` | `/api/challenges` | List challenges (never exposes `hiddenTests`/`expectedSolution`) |
+| `POST` | `/api/challenges` | Create challenge (validated) |
+| `GET` | `/api/challenges/:id` | Full challenge |
+| `PUT` | `/api/challenges/:id` | Update (bumps `metadata.version`) |
+| `DELETE` | `/api/challenges/:id` | Soft delete |
+| `POST` | `/api/practical-challenges/:id/executions` | Run / evaluate a challenge solution |
+| `POST` | `/api/submissions` | Submit with verdict, feedback, failing test and integrity risk |
+| `POST` | `/api/chat` | AI tutor reply |
+| `GET` | `/api/chat/status` | Chat provider / model / Ollama URL |
+| `POST` | `/api/preview-run` | Wizard preview execution |
+
+### Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3100` | API port |
+| `MMV_DATA_DIR` | `server/data` | JSON persistence directory |
+| `CHAT_PROVIDER` | `stub` | `stub` or `ollama` |
+| `OLLAMA_URL` | `http://localhost:11434/v1` | Ollama OpenAI-compatible endpoint |
+| `OLLAMA_MODEL` | `llama3` | Ollama model name |
+
+### Challenge domain
+
+- **Subtypes**: `algorithms`, `block-completion`, `find-bug`, `refactoring`, `hackathon`, `modeling`, `code-review`. The first three are **runnable** (and therefore evaluable). A challenge is also evaluable if its `configuration.runtime` is `maven-test` or `node-spec`. Challenges with neither are plain "consignas" — executions return `422`.
+- **Difficulties**: `BASICO`, `MEDIO`, `AVANZADO`. **Risk levels**: `ALTO`, `MEDIO`, `BAJO`.
+- **Seeds**: 7 example challenges covering TS algorithms, block-completion, find-bug, a Spring Boot `maven-test` challenge, two Angular forms challenges and an HTML/CSS/JS `node-spec` challenge.
+
+## Project layout
+
+```
+src/                 Angular 22 app (standalone components)
+  app/views/         dashboard, challenge-wizard, challenge-solve, challenge-result, challenge-published
+  app/services/      session, challenges, banner (signals)
+  app/monaco-editor.ts, chat-panel.ts   reusable wrappers (with sidecar .html/.css)
+  app/compile.service.ts    single fetch-based API client
+  app/challenge-types.ts    domain model
+  app/challenge-drafts.ts   wizard state + per-subtype templates
+server/              Node backend (ESM, no framework)
+  index.mjs          HTTP routing + API + seed challenges + validation
+  executor.mjs       sandbox runtimes (esbuild / javac+java / maven-test / node-spec)
+  chat.mjs           AI tutor (stub / Ollama, anti-leak guard)
+  integrity.mjs      assessIntegrityRisk (pure function)
+  store.mjs          JSON persistence (in-memory cache + write-through)
+  dev.mjs            dev launcher (API + Angular together)
+  practical.test.mjs integration tests (node --test)
+  data/*.json        persistence (gitignored; don't edit while the server runs)
+docs/                PRD, Grupo 5 epic proposal, PIV architecture docs (Spanish)
+DESIGN_DECISIONS.md  design decisions log (Spanish)
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+## Documentation
 
-## Running unit tests
+- `docs/PRD-Plataforma-Gamificada-TP.md` — full product PRD for the gamified platform.
+- `docs/Propuesta_Grupo5.docx.md` — Grupo 5 "Motor de Desafíos Prácticos" epics.
+- `docs/PIV-FE-Propuesta-Arquitectura.md`, `docs/PIV-BE-Propuesta-Arquitectura.md` — frontend/backend architecture proposals.
+- `DESIGN_DECISIONS.md` — design decisions and rationale.
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+> Note: `docs/` files are in Spanish; code and messages stay in English, while server UI-facing verdicts/feedback are Spanish.

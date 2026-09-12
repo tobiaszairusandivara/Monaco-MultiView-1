@@ -159,6 +159,8 @@ export interface Challenge {
   topic?: string;
   subtype: ChallengeSubtype;
   difficulty: Difficulty;
+  mandatory?: boolean;
+  durationMs?: number | null;
   configuration: ChallengeConfiguration;
   metadata: ChallengeMetadata;
   riskLevel?: RiskLevel;
@@ -172,6 +174,7 @@ export interface ChallengeListItem {
   notes: string;
   subtype: ChallengeSubtype;
   difficulty: Difficulty;
+  mandatory: boolean;
   riskLevel: RiskLevel;
   metadata: { version: number; createdAt: string; updatedAt: string; softDeleted: boolean };
   configuration: {
@@ -190,7 +193,9 @@ export interface Draft {
   title: string;
   topic: string;
   difficulty: Difficulty;
+  mandatory: boolean;
   subtype: ChallengeSubtype;
+  durationMs: number | null;
   notes: string;
   materialDocs: string[];
   language: 'typescript';
@@ -266,6 +271,8 @@ export interface CreateChallengePayload {
   topic: string;
   subtype: ChallengeSubtype;
   difficulty: Difficulty;
+  mandatory: boolean;
+  durationMs?: number | null;
   notes: string;
   materialDocs: string[];
   configuration: {
