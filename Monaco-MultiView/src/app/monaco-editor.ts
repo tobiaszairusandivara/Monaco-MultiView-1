@@ -28,7 +28,7 @@ export class MonacoEditor implements AfterViewInit, OnChanges, OnDestroy {
 
   @Input() value = '';
   @Input() language = 'plaintext';
-  @Input() theme = 'vs-dark';
+  @Input() theme = 'vs';
 
   @Output() readonly valueChange = new EventEmitter<string>();
   @Output() readonly zoomChange = new EventEmitter<number>();

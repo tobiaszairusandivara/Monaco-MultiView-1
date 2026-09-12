@@ -169,6 +169,7 @@ export interface ChallengeListItem {
   courseCohortId: string;
   title: string;
   topic: string;
+  notes: string;
   subtype: ChallengeSubtype;
   difficulty: Difficulty;
   riskLevel: RiskLevel;
@@ -240,6 +241,8 @@ export interface EvaluationResult {
   output?: string;
   error?: string;
   tests?: Array<{ name: string; passed: boolean; message?: string }>;
+  timeMs?: number;
+  memoryBytes?: number;
 }
 
 export interface SubmissionResult {

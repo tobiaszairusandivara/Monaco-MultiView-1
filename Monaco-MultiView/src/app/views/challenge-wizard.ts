@@ -16,6 +16,7 @@ import {
   type CreateChallengePayload,
   type Difficulty,
   type Draft,
+  type Verdict,
 } from '../challenge-types';
 import { goBack, isRunnableSubtype, linesEqual, normalizeLines } from '../shared';
 import { formatTestFile } from '../test-formatter';
@@ -25,11 +26,19 @@ import { ChallengesService } from '../services/challenges.service';
 const WIZARD_STAGES = ['Subtipo', 'Datos', 'Contenido', 'Preview'] as const;
 type WizardStage = (typeof WIZARD_STAGES)[number];
 
-interface PreviewTestResult {
+interface PreviewFailDetail {
   name: string;
-  passed: boolean;
+  input: string;
+  expected: string;
   actual: string;
   status: string;
+}
+
+interface PreviewVerdictState {
+  verdict: Verdict;
+  feedback: string;
+  tests: { passed: number; total: number } | null;
+  failingTest: PreviewFailDetail | null;
 }
 
 @Component({
@@ -241,6 +250,42 @@ interface PreviewTestResult {
                 <app-monaco-editor [value]="wizardEditorContent()" language="typescript" />
               </div>
             </div>
+            <div class="output-box">
+              @for (line of previewOutputLines(); track $index) {
+                <div class="line mono">{{ line }}</div>
+              }
+            </div>
+            @if (previewVerdict(); as verdict) {
+              <div class="check-strip">
+                <div class="verdict verdict-{{ verdict.verdict }}">
+                  <strong>{{ verdict.verdict }}</strong>
+                  <span>{{ verdict.feedback }}</span>
+                  @if (verdict.tests; as tests) {
+                    <span class="test-summary">
+                      Tests superados: <strong>{{ tests.passed }} de {{ tests.total }}</strong>
+                    </span>
+                  }
+                  @if (verdict.failingTest; as fail) {
+                    <div class="fail-block">
+                      <div class="fail-head">
+                        Test "{{ fail.name }}" — {{ fail.status }}
+                        @if (fail.input) {
+                          <span> · entrada: <span class="mono">{{ fail.input }}</span></span>
+                        }
+                      </div>
+                      <div class="cmp-line">
+                        <span class="cmp-label">Salida esperada</span>
+                        <span class="mono cmp-value">{{ fail.expected }}</span>
+                      </div>
+                      <div class="cmp-line">
+                        <span class="cmp-label">Su salida</span>
+                        <span class="mono cmp-value">{{ fail.actual }}</span>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
             <app-chat-panel [challengeId]="null" [riskLevel]="wizardRisk()" />
             <div class="preview-actions">
               <button type="button" class="btn btn-secondary" (click)="goToStage('Contenido')">
@@ -248,19 +293,12 @@ interface PreviewTestResult {
               </button>
               <button
                 type="button"
-                class="btn btn-secondary"
+                class="btn btn-primary"
                 [disabled]="previewCheckBusy() || !isRunnableSubtype(wizardSubtype())"
-                (click)="runPreviewExecute()"
+                (click)="runPreviewCompile()"
+                title="Compilar, ejecutar y verificar"
               >
-                Ejecutar
-              </button>
-              <button
-                type="button"
-                class="btn btn-secondary"
-                [disabled]="previewCheckBusy() || !isRunnableSubtype(wizardSubtype())"
-                (click)="runPreviewCheck()"
-              >
-                Comprobar
+                {{ previewCheckBusy() ? 'Compilando…' : 'Compilar' }}
               </button>
               <button
                 type="button"
@@ -271,19 +309,6 @@ interface PreviewTestResult {
                 {{ publishBusy() ? 'Publicando…' : 'Publicar desafío' }}
               </button>
             </div>
-            @if (previewTests().length > 0) {
-              <div class="test-results">
-                @for (t of previewTests(); track t.name) {
-                  <div class="test-row" [class.pass]="t.passed" [class.fail]="!t.passed">
-                    <div>
-                      <strong>{{ t.passed ? 'PASA' : 'FALLA' }}</strong>
-                      <span class="muted">{{ t.name }} · {{ t.status }}</span>
-                    </div>
-                    <pre class="mono">{{ t.actual || '(sin salida)' }}</pre>
-                  </div>
-                }
-              </div>
-            }
           </div>
         }
       }
@@ -305,7 +330,8 @@ export class ChallengeWizardComponent implements OnInit {
   protected readonly draftFileIndex = signal(0);
   protected readonly editingChallengeId = signal<string | null>(null);
   protected readonly contentErrors = signal('');
-  protected readonly previewTests = signal<PreviewTestResult[]>([]);
+  protected readonly previewVerdict = signal<PreviewVerdictState | null>(null);
+  protected readonly previewOutputLines = signal<string[]>([]);
   protected readonly previewCheckBusy = signal(false);
   protected readonly publishBusy = signal(false);
   protected newFilePath = '';
@@ -372,7 +398,8 @@ export class ChallengeWizardComponent implements OnInit {
     this.draftNotes = draft.notes;
     this.newFilePath = '';
     this.contentErrors.set('');
-    this.previewTests.set([]);
+    this.previewVerdict.set(null);
+    this.previewOutputLines.set([]);
     this.editingChallengeId.set(null);
     this.wizardStage.set('Datos');
   }
@@ -386,7 +413,8 @@ export class ChallengeWizardComponent implements OnInit {
     this.draftNotes = draft.notes;
     this.newFilePath = '';
     this.contentErrors.set('');
-    this.previewTests.set([]);
+    this.previewVerdict.set(null);
+    this.previewOutputLines.set([]);
     this.editingChallengeId.set(null);
     this.wizardStage.set('Datos');
     this.banner.show(
@@ -609,16 +637,20 @@ export class ChallengeWizardComponent implements OnInit {
     if (!this.validateContent()) {
       return;
     }
-    this.previewTests.set([]);
+    this.previewVerdict.set(null);
+    this.previewOutputLines.set([]);
     this.wizardStage.set('Preview');
   }
 
-  protected async runPreviewExecute(): Promise<void> {
+  protected async runPreviewCompile(): Promise<void> {
     const draft = this.draft();
     if (!draft) {
       return;
     }
     this.previewCheckBusy.set(true);
+    this.previewOutputLines.set([]);
+    this.previewVerdict.set(null);
+    this.writePreviewLine('> Compilando y ejecutando en el sandbox…');
     try {
       const run = await this.compileService.previewRun(
         draft.baseFiles.map((file) => ({ ...file })),
@@ -626,66 +658,129 @@ export class ChallengeWizardComponent implements OnInit {
         '',
         draft.runtime ?? undefined,
       );
-      this.previewTests.set([
-        {
-          name: 'Ejecución',
-          passed: run.status === 'ok',
-          actual: run.status === 'ok' ? run.output.trim() : run.error || run.status || '(sin salida)',
-          status: run.status,
-        },
-      ]);
+      if (run.status === 'ok') {
+        (run.output ?? '').split('\n').forEach((line) => this.writePreviewLine(line));
+      } else {
+        this.writePreviewLine(`> ${run.error ?? 'El programa no se pudo ejecutar.'}`);
+      }
+      if (run.timeMs !== undefined) {
+        this.writePreviewLine(`> Compilación finalizada en ${run.timeMs} ms.`);
+      }
+
+      const suiteTests = run.tests ?? [];
+      if (suiteTests.length > 0) {
+        const passed = suiteTests.filter((test) => test.passed).length;
+        const failing = suiteTests.find((test) => !test.passed);
+        this.previewVerdict.set({
+          verdict: passed === suiteTests.length ? 'SUPERADO' : 'FALLADO',
+          feedback:
+            passed === suiteTests.length
+              ? 'Todas las verificaciones pasaron.'
+              : `El test "${failing?.name ?? 'desconocido'}" no pasó la verificación esperada.`,
+          tests: { passed, total: suiteTests.length },
+          failingTest: failing
+            ? {
+                name: failing.name,
+                input: '',
+                expected: 'el test pasa',
+                actual: failing.message || 'La verificación esperada no se cumplió.',
+                status: 'assertion',
+              }
+            : null,
+        });
+        return;
+      }
+
+      const parsed = parseHiddenTests(draft.hiddenTestsText);
+      if (parsed.tests === null) {
+        this.previewVerdict.set({
+          verdict: 'ERROR_TECNICO',
+          feedback: parsed.error,
+          tests: null,
+          failingTest: null,
+        });
+        return;
+      }
+      const runnable = parsed.tests.filter((test) => !test.source || test.input !== undefined);
+      if (runnable.length === 0) {
+        this.previewVerdict.set({
+          verdict: 'ERROR_TECNICO',
+          feedback: 'Ningún test del JSON tiene input/expected ejecutable en el preview.',
+          tests: null,
+          failingTest: null,
+        });
+        return;
+      }
+      const files = draft.baseFiles.map((file) => ({ ...file }));
+      let passedCount = 0;
+      let networkFailures = 0;
+      let firstFail: PreviewFailDetail | null = null;
+      for (const test of runnable) {
+        try {
+          const attempt = await this.compileService.previewRun(
+            files,
+            draft.entry,
+            test.input ?? '',
+            draft.runtime ?? undefined,
+          );
+          const passed =
+            attempt.status === 'ok' &&
+            linesEqual(normalizeLines(attempt.output), normalizeLines(test.expected));
+          if (passed) {
+            passedCount += 1;
+          } else if (!firstFail) {
+            firstFail = {
+              name: test.name,
+              input: test.input ?? '',
+              expected: test.expected,
+              actual:
+                attempt.status === 'ok'
+                  ? attempt.output
+                  : attempt.error || attempt.status || 'sin salida',
+              status: attempt.status,
+            };
+          }
+        } catch (error) {
+          networkFailures += 1;
+          if (!firstFail) {
+            const message = error instanceof Error ? error.message : String(error);
+            firstFail = {
+              name: test.name,
+              input: test.input ?? '',
+              expected: test.expected,
+              actual: message,
+              status: 'network',
+            };
+          }
+        }
+      }
+      const passedAll = passedCount === runnable.length;
+      this.previewVerdict.set({
+        verdict: passedAll ? 'SUPERADO' : networkFailures === runnable.length ? 'ERROR_TECNICO' : 'FALLADO',
+        feedback: passedAll
+          ? 'Todas las verificaciones pasaron.'
+          : networkFailures === runnable.length
+            ? 'El evaluador no respondió; revisá que el servidor de compilación esté levantado.'
+            : `Se superaron ${passedCount} de ${runnable.length} verificaciones.`,
+        tests: { passed: passedCount, total: runnable.length },
+        failingTest: firstFail,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.previewTests.set([{ name: 'Ejecución', passed: false, actual: message, status: 'network' }]);
+      this.writePreviewLine(`> ${message}`);
+      this.previewVerdict.set({
+        verdict: 'ERROR_TECNICO',
+        feedback: message,
+        tests: null,
+        failingTest: null,
+      });
     } finally {
       this.previewCheckBusy.set(false);
     }
   }
 
-  protected async runPreviewCheck(): Promise<void> {
-    const draft = this.draft();
-    if (!draft || !RUNNABLE_SUBTYPES.has(draft.subtype)) {
-      this.banner.show('Este subtipo no tiene evaluador automático en el prototipo.');
-      return;
-    }
-    const parsed = parseHiddenTests(draft.hiddenTestsText);
-    if (parsed.tests === null) {
-      this.contentErrors.set(parsed.error);
-      return;
-    }
-    const runnable = parsed.tests.filter((test) => !test.source || test.input !== undefined);
-    if (runnable.length === 0) {
-      this.banner.show(
-        'Ningún test del JSON tiene input/expected ejecutable en el preview; completá el JSON o usá la plantilla del stack.',
-      );
-      return;
-    }
-    this.previewCheckBusy.set(true);
-    const files = draft.baseFiles.map((file) => ({ ...file }));
-    const results: PreviewTestResult[] = [];
-    for (const test of runnable) {
-      try {
-        const run = await this.compileService.previewRun(
-          files,
-          draft.entry,
-          test.input ?? '',
-          draft.runtime ?? undefined,
-        );
-        const passed =
-          run.status === 'ok' && linesEqual(normalizeLines(run.output), normalizeLines(test.expected));
-        results.push({
-          name: test.name,
-          passed,
-          actual: run.status === 'ok' ? run.output.trim() : run.error,
-          status: run.status,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        results.push({ name: test.name, passed: false, actual: message, status: 'network' });
-      }
-    }
-    this.previewTests.set(results);
-    this.previewCheckBusy.set(false);
+  private writePreviewLine(line: string): void {
+    this.previewOutputLines.update((lines) => [...lines.slice(-500), line]);
   }
 
   protected async publish(): Promise<void> {
@@ -748,7 +843,8 @@ export class ChallengeWizardComponent implements OnInit {
       this.draftNotes = challenge.metadata?.notes ?? '';
       this.newFilePath = '';
       this.contentErrors.set('');
-      this.previewTests.set([]);
+      this.previewVerdict.set(null);
+    this.previewOutputLines.set([]);
       this.wizardStage.set('Datos');
       this.banner.show(
         `Editando "${challenge.title}" (v${challenge.metadata?.version ?? 1}). Al publicar se crea la v${(challenge.metadata?.version ?? 1) + 1} conservando el challengeId.`,

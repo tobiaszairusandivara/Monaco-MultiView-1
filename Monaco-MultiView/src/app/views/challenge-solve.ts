@@ -14,6 +14,7 @@ interface CheckState {
   verdict: Verdict;
   feedback: string;
   failingTest?: FailingTest | null;
+  tests?: { passed: number; total: number } | null;
 }
 
 @Component({
@@ -27,7 +28,6 @@ interface CheckState {
           <button type="button" class="btn btn-secondary" (click)="back()">← Volver</button>
           <h2>{{ challenge.title }}</h2>
           <span class="tag">{{ challenge.subtype }}</span>
-          <span class="badge badge-{{ riskOf(challenge) }}">riesgo {{ riskOf(challenge) }}</span>
           <span class="badge badge-diff">{{ challenge.difficulty }}</span>
           @if (challenge.configuration.runtime) {
             <span class="tag">{{ challenge.configuration.runtime }}</span>
@@ -72,21 +72,12 @@ interface CheckState {
                   <span class="spacer"></span>
                   <button
                     type="button"
-                    class="btn btn-secondary"
-                    [disabled]="busy()"
-                    (click)="runConsole()"
-                    title="Ejecutar (F5)"
-                  >
-                    Ejecutar <kbd>F5</kbd>
-                  </button>
-                  <button
-                    type="button"
                     class="btn btn-primary"
                     [disabled]="busy()"
-                    (click)="checkSolution()"
-                    title="Comprobar (F9)"
+                    (click)="compile()"
+                    title="Compilar, ejecutar y verificar (F5)"
                   >
-                    Comprobar <kbd>F9</kbd>
+                    Compilar <kbd>F5</kbd>
                   </button>
                   <button
                     type="button"
@@ -99,34 +90,6 @@ interface CheckState {
                   </button>
                 </div>
 
-                @if (check(); as check) {
-                  <div class="check-strip">
-                    <div class="verdict verdict-{{ check.verdict }}">
-                      <strong>{{ check.verdict }}</strong>
-                      <span>{{ check.feedback }}</span>
-                      @if (check.failingTest; as fail) {
-                        <div class="fail-block">
-                          <div class="fail-head">
-                            Test "{{ fail.name }}" — {{ fail.status }}
-                            @if (fail.input) {
-                              <span> · entrada: <span class="mono">{{ fail.input }}</span></span>
-                            }
-                          </div>
-                          <div class="cmp-grid">
-                            <div>
-                              <span class="cmp-label">Salida esperada</span>
-                              <pre class="mono">{{ fail.expected }}</pre>
-                            </div>
-                            <div>
-                              <span class="cmp-label">Su salida</span>
-                              <pre class="mono">{{ fail.actual }}</pre>
-                            </div>
-                          </div>
-                        </div>
-                      }
-                    </div>
-                  </div>
-                }
                 <app-monaco-editor
                   class="student-editor"
                   [value]="activeContent()"
@@ -139,6 +102,37 @@ interface CheckState {
                     <div class="line mono">{{ line }}</div>
                   }
                 </div>
+                @if (check(); as check) {
+                  <div class="check-strip">
+                    <div class="verdict verdict-{{ check.verdict }}">
+                      <strong>{{ check.verdict }}</strong>
+                      <span>{{ check.feedback }}</span>
+                      @if (check.tests; as tests) {
+                        <span class="test-summary">
+                          Tests superados: <strong>{{ tests.passed }} de {{ tests.total }}</strong>
+                        </span>
+                      }
+                      @if (check.failingTest; as fail) {
+                        <div class="fail-block">
+                          <div class="fail-head">
+                            Test "{{ fail.name }}" — {{ fail.status }}
+                            @if (fail.input) {
+                              <span> · entrada: <span class="mono">{{ fail.input }}</span></span>
+                            }
+                          </div>
+                          <div class="cmp-line">
+                            <span class="cmp-label">Salida esperada</span>
+                            <span class="mono cmp-value">{{ fail.expected }}</span>
+                          </div>
+                          <div class="cmp-line">
+                            <span class="cmp-label">Su salida</span>
+                            <span class="mono cmp-value">{{ fail.actual }}</span>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
               </div>
             </div>
           } @else {
@@ -216,10 +210,7 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
   protected onWindowKeydown(event: KeyboardEvent): void {
     if (event.key === 'F5') {
       event.preventDefault();
-      void this.runConsole();
-    } else if (event.key === 'F9') {
-      event.preventDefault();
-      void this.checkSolution();
+      void this.compile();
     } else if (event.ctrlKey && (event.key === 's' || event.key === 'S')) {
       event.preventDefault();
       void this.submit();
@@ -322,67 +313,89 @@ export class ChallengeSolveComponent implements OnInit, OnDestroy {
     this.outputLines.update((lines) => [...lines.slice(-500), line]);
   }
 
-  protected async runConsole(): Promise<void> {
+  protected async compile(): Promise<void> {
     const challenge = this.challenge();
     if (!challenge || this.busy()) {
       return;
     }
     this.busy.set(true);
     this.outputLines.set([]);
-    this.writeLine('> Ejecutando en el sandbox…');
+    this.check.set(null);
+    this.writeLine('> Compilando y ejecutando en el sandbox…');
     try {
-      const result = await this.compileService.runExecution(
+      const run = await this.compileService.runExecution(
         challenge.challengeId,
         this.payloadFiles(),
         challenge.configuration.entry,
         false,
       );
-      if (result.status === 'ok') {
-        (result.output ?? '').split('\n').forEach((line) => this.writeLine(line));
+      if (run.status === 'ok') {
+        (run.output ?? '').split('\n').forEach((line) => this.writeLine(line));
       } else {
-        this.writeLine(`> ${result.error ?? 'El programa no se pudo ejecutar.'}`);
+        this.writeLine(`> ${run.error ?? 'El programa no se pudo ejecutar.'}`);
       }
-      this.writeLine('> Ejecución finalizada.');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.writeLine(`> ${message}`);
-    } finally {
-      this.busy.set(false);
-    }
-  }
+      if (run.timeMs !== undefined) {
+        this.writeLine(`> Compilación finalizada en ${run.timeMs} ms.`);
+      }
 
-  protected async checkSolution(): Promise<void> {
-    const challenge = this.challenge();
-    if (!challenge || this.busy()) {
-      return;
-    }
-    this.busy.set(true);
-    try {
       const result = await this.compileService.runExecution(
         challenge.challengeId,
         this.payloadFiles(),
         challenge.configuration.entry,
         true,
       );
-      if (result.verdict === 'ERROR_TECNICO') {
-        this.check.set({
-          verdict: 'ERROR_TECNICO',
-          feedback: `${result.feedback ?? 'Error técnico del evaluador.'} Intentá de nuevo.`,
-          failingTest: result.failingTest ?? null,
-        });
-      } else {
-        this.check.set({
-          verdict: result.verdict ?? 'FALLADO',
-          feedback: result.feedback ?? 'Sin feedback.',
-          failingTest: result.failingTest ?? null,
-        });
-      }
+      const suiteTests = result.tests ?? run.tests ?? [];
+      const tests =
+        suiteTests.length > 0
+          ? {
+              passed: suiteTests.filter((test) => test.passed).length,
+              total: suiteTests.length,
+            }
+          : this.hiddenTestSummary(result.verdict, result.failingTest);
+      const verdict = result.verdict ?? (run.status === 'ok' ? 'FALLADO' : 'ERROR_TECNICO');
+      const feedback =
+        result.feedback ??
+        (run.status === 'ok' ? 'Sin feedback.' : run.error ?? 'La verificación no se pudo completar.');
+      this.check.set({
+        verdict,
+        feedback,
+        failingTest: result.failingTest ?? null,
+        tests,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      this.writeLine(`> ${message}`);
       this.check.set({ verdict: 'ERROR_TECNICO', feedback: message, failingTest: null });
     } finally {
       this.busy.set(false);
     }
+  }
+
+  private hiddenTestSummary(
+    verdict: Verdict | undefined,
+    failingTest: FailingTest | null | undefined,
+  ): { passed: number; total: number } | null {
+    const challenge = this.challenge();
+    if (!challenge) {
+      return null;
+    }
+    const hidden = challenge.configuration.hiddenTests ?? [];
+    if (hidden.length === 0) {
+      return null;
+    }
+    if (verdict === 'SUPERADO') {
+      return { passed: hidden.length, total: hidden.length };
+    }
+    if (failingTest) {
+      const index = hidden.findIndex(
+        (test) =>
+          test.expected === failingTest.expected && (test.input ?? '') === failingTest.input,
+      );
+      if (index >= 0) {
+        return { passed: index, total: hidden.length };
+      }
+    }
+    return null;
   }
 
   protected async submit(): Promise<void> {

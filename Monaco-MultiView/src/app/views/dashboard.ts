@@ -1,6 +1,6 @@
 import { Component, HostListener, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { DEFAULT_COHORT, SUBTYPE_RISK, type ChallengeListItem } from '../challenge-types';
+import { DEFAULT_COHORT, type ChallengeListItem } from '../challenge-types';
 import { BannerService } from '../services/banner.service';
 import { ChallengesService } from '../services/challenges.service';
 import { SessionService } from '../services/session.service';
@@ -30,25 +30,13 @@ import { SessionService } from '../services/session.service';
             <article class="card">
               <div class="card-top">
                 <span class="tag">{{ c.subtype }}</span>
-                <span class="badge badge-{{ riskOf(c) }}">riesgo {{ riskOf(c) }}</span>
                 <span class="badge badge-diff">{{ c.difficulty }}</span>
               </div>
               <h3 class="card-title">{{ c.title }}</h3>
               <p class="card-topic">{{ c.topic || 'Sin tema' }}</p>
-              <dl class="card-meta">
-                <div>
-                  <dt>Archivos base</dt>
-                  <dd>{{ c.configuration.fileCount }}</dd>
-                </div>
-                <div>
-                  <dt>Tests ocultos</dt>
-                  <dd>{{ c.configuration.testCount }}</dd>
-                </div>
-                <div>
-                  <dt>Id</dt>
-                  <dd class="mono">{{ c.challengeId }}</dd>
-                </div>
-              </dl>
+              @if (c.notes) {
+                <p class="card-desc">{{ c.notes }}</p>
+              }
               <div class="card-footer">
                 @if (role() === 'ALUMNO') {
                   <button type="button" class="btn btn-primary" (click)="open(c)">Resolver</button>
@@ -104,7 +92,6 @@ export class DashboardComponent implements OnInit {
   protected readonly challenges = this.challengesService.list;
   protected readonly busy = this.challengesService.busy;
   protected readonly cohort = DEFAULT_COHORT;
-  protected readonly riskOf = (c: ChallengeListItem) => c.riskLevel ?? SUBTYPE_RISK[c.subtype];
   protected readonly deleteTarget = signal<ChallengeListItem | null>(null);
 
   @HostListener('window:keydown', ['$event'])
